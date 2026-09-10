@@ -1,0 +1,45 @@
+html,
+body {
+  min-height: 100%;
+  background: #172b28;
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
+}
+button {
+  color: inherit;
+}
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+input:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 4px;
+}
+button {
+  touch-action: manipulation;
+}
+h1,
+h2 {
+  font-weight: 500;
+  line-height: 1.1;
+}
+p {
+  color: var(--muted);
+}
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 12px 20px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #ffffff09;
+  font-weight: 600;
+}
+.button:hover:not(:disabled) {
+  background: #ffffff18;
+}

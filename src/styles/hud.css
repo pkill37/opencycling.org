@@ -1,0 +1,23 @@
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.hud-panel {
+  background: #132821df;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.metric {
+  font-variant-numeric: tabular-nums;
+}
+.metric--hero {
+  font-size: clamp(48px, 8vw, 90px);
+}
+.metric--primary {
+  font-size: 32px;
+}
+.metric--secondary {
+  font-size: 20px;
+}
