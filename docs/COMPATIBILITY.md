@@ -33,3 +33,23 @@ No physical trainer was available in the implementation environment. The rows be
 10. Measure F3 frame rates on actual desktop and weaker/mobile devices. Target 60 FPS desktop, at least 30 FPS weaker devices; this is not yet a hardware-verified guarantee.
 
 Simulator: ↑/W +25 W, ↓/S −25 W, 1–9 = 100/150/200/250/300/400/500/600/800 W, Space +300 W for 1.5 s. C camera, H HUD, P pause, Esc finish, F3 debug. Touch controls provide equivalent basic riding actions.
+
+## USB and Bluetooth gamepads
+
+Connect the controller by USB, or pair it in your operating system’s Bluetooth settings. Open OpenRide over HTTPS or localhost, focus the page, and press a controller button to make it visible to the browser. Release the controls before riding. The **Gamepad controller** card in setup shows the device name, connection state, and live input feedback. Bluetooth and USB setup buttons show instructions for each method; **Check connection** retries discovery and API access. During a ride, **Gamepad · Connected / Not connected** shows the current state and expands to the same device card.
+
+An already paired Bluetooth controller may remain invisible until you press a button with the page active. Detection runs automatically and refreshes on connection/disconnection events or when the page regains focus. USB and Bluetooth use the same browser API, which does not expose the active transport; the setup buttons select instructions, not a detected connection type.
+
+OpenRide uses the [browser Gamepad API](https://www.w3.org/TR/gamepad/) and requires a browser-recognized `standard` mapping. Gamepads do not use the smart trainer Bluetooth chooser. Unrecognized layouts and blocked/unavailable API access show a fallback message. With multiple controllers, the first standard controller is used and retained until disconnected.
+
+| Control                        | Action                                   |
+| ------------------------------ | ---------------------------------------- |
+| D-pad or left stick up/down    | Simulator power ±25 W; hold to repeat    |
+| Bottom face button (A / Cross) | Simulator sprint, +300 W for 1.5 seconds |
+| Left face button (X / Square)  | Cycle camera                             |
+| Top face button (Y / Triangle) | Toggle HUD                               |
+| Menu / Options (Start)         | Start/restart a ride, or pause/resume    |
+
+Power and sprint do not change live trainer telemetry. Button actions fire once per press; the stick has a dead zone. Input is suspended while the page is hidden, unfocused, or a text field is being edited. Controls must be released after returning to the page or changing ride/source. Disconnecting the active controller pauses a ride; reconnect and press Menu / Options to resume, or use keyboard/touch controls. Finish remains available on screen or with Esc.
+
+Automated tests use simulated gamepad snapshots. Physical USB and Bluetooth hardware verification is still pending: test each transport, button mapping, held inputs, unplug/reconnect, tab switching, and use alongside a live trainer on your OS/browser.

@@ -13,6 +13,8 @@ import { RideEngine } from "@/game/loop/engine";
 import { SimulatorSource } from "@/bluetooth/sources/simulator-source";
 import { BluetoothTrainerSource } from "@/bluetooth/sources/bluetooth-trainer-source";
 import { bluetoothAvailability } from "@/bluetooth/availability";
+import { useGamepad } from "@/game/input/use-gamepad";
+import GamepadConnection from "./GamepadConnection";
 import type { RideSummary, RiderState } from "@/types";
 import styles from "./OpenRide.module.css";
 const time = (seconds: number) =>
@@ -249,6 +251,31 @@ export default function OpenRide({
   }, [phase, source, sim, togglePause, toggleCamera, finish]);
   const sample = trainer.last,
     canStart = source === "simulator" || trainer.state === "connected";
+  const gamepadStatus = useGamepad(
+    (action) => {
+      if (phase !== "ride") {
+        if (action === "pause" && canStart && !worldError) start();
+        return;
+      }
+      if (worldLoading || worldError) return;
+      if (action === "pause") togglePause();
+      if (action === "camera") toggleCamera();
+      if (action === "hud") setHud((value) => !value);
+      if (source === "simulator") {
+        if (action === "increase") sim.increasePower();
+        if (action === "decrease") sim.decreasePower();
+        if (action === "sprint") sim.sprint();
+      }
+    },
+    () => {
+      if (phase === "ride") {
+        activeEngine.setPaused(true);
+        setPaused(true);
+      }
+    },
+    `${phase}:${source}:${worldLoading}`,
+  );
+  const gamepadHelp = <GamepadConnection connection={gamepadStatus} />;
   const metric = (label: string, value: string, unit: string) => (
     <div className={styles.metric}>
       <span>{label}</span>
@@ -382,11 +409,12 @@ export default function OpenRide({
                 <span>⌨</span>
                 <div>
                   <strong>Use simulator</strong>
-                  <small>Your keyboard is your power source</small>
+                  <small>Keyboard, touch, or USB / Bluetooth gamepad</small>
                 </div>
                 <span>{source === "simulator" ? "✓" : "↗"}</span>
               </button>
               <p className={styles.support}>{availability.message}</p>
+              {gamepadHelp}
               {setup && source === "bluetooth" && (
                 <div className={styles.connection} aria-live="polite">
                   <strong>
@@ -596,6 +624,15 @@ export default function OpenRide({
               </button>
               <button onClick={finish}>Finish</button>
             </div>
+            <details className={styles.gamepadHelp}>
+              <summary>
+                Gamepad ·{" "}
+                {gamepadStatus.state === "connected"
+                  ? "Connected"
+                  : "Not connected"}
+              </summary>
+              {gamepadHelp}
+            </details>
           </div>
           {debug && (
             <pre className={styles.debug}>

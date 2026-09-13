@@ -422,6 +422,27 @@
   gap: 12px;
   align-items: center;
 }
+.gamepadHelp {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  max-width: min(360px, 85vw);
+  max-height: min(65dvh, 560px);
+  overflow-y: auto;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #142320ee;
+  color: #fff;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.gamepadHelp summary {
+  cursor: pointer;
+  min-height: 24px;
+}
+.gamepadHelp p {
+  margin-top: 8px;
+}
 .controlGroup {
   display: flex;
   align-items: center;
