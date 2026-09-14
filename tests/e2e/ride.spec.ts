@@ -69,6 +69,37 @@ test("phone simulator touch controls remain usable", async ({ page }) => {
   ).toBe(true);
 });
 
+test("mouse orbit and wheel zoom control the ride camera", async ({ page }) => {
+  await page.goto("/ride/");
+  await page.getByRole("button", { name: "Start ride" }).click();
+  const canvas = page.locator("canvas");
+  await expect(canvas).toBeVisible();
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Ride paused" }),
+  ).toBeVisible();
+
+  const box = await canvas.boundingBox();
+  expect(box).not.toBeNull();
+  // Keep the gesture outside the centered pause dialog.
+  const centerX = box!.x + box!.width * 0.82;
+  const centerY = box!.y + box!.height * 0.22;
+  const before = await canvas.screenshot();
+
+  await page.mouse.move(centerX, centerY);
+  await page.mouse.down();
+  await page.mouse.move(centerX + 180, centerY - 60, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForTimeout(100);
+  const afterOrbit = await canvas.screenshot();
+  expect(Buffer.compare(afterOrbit, before)).not.toBe(0);
+
+  await page.mouse.wheel(0, 500);
+  await page.waitForTimeout(100);
+  const afterZoom = await canvas.screenshot();
+  expect(Buffer.compare(afterZoom, afterOrbit)).not.toBe(0);
+});
+
 test("FTMS browser notifications drive the ride and disconnect offers fallback", async ({
   page,
 }) => {

@@ -55,12 +55,18 @@ test("gamepad starts a ride, controls it, and pauses on disconnect", async ({
   await setPad(page, [9]);
   await expect(page.locator("canvas")).toBeVisible();
   await expect(page.getByRole("status")).toBeHidden();
+  await expect(
+    page.getByText("VIRTUAL TRAINER", { exact: true }),
+  ).toBeVisible();
   await setPad(page);
-  await page.waitForTimeout(100);
+  await page.locator("main").click({ position: { x: 400, y: 300 } });
+  await page.waitForTimeout(500);
   await setPad(page, [12]);
   await page.waitForTimeout(100);
   await setPad(page);
-  await expect(page.getByText("175 W", { exact: true })).toBeVisible();
+  await expect(page.getByText("175 W", { exact: true })).toBeVisible({
+    timeout: 10000,
+  });
   await page.waitForTimeout(100);
   await setPad(page, [2]);
   await expect(page.getByText("First person", { exact: true })).toBeVisible();

@@ -138,7 +138,8 @@ export default function OpenRide({
     if (!host.current || phase !== "ride") return;
     const element = host.current;
     import("@/game/world/scene")
-      .then(({ createWorld }) => {
+      .then(async ({ createWorld, preloadWorldTextures }) => {
+        await preloadWorldTextures();
         if (stopped) return;
         try {
           view = createWorld(element, e);
@@ -273,7 +274,7 @@ export default function OpenRide({
         setPaused(true);
       }
     },
-    `${phase}:${source}:${worldLoading}`,
+    `${phase}:${source}`,
   );
   const gamepadHelp = <GamepadConnection connection={gamepadStatus} />;
   const metric = (label: string, value: string, unit: string) => (
