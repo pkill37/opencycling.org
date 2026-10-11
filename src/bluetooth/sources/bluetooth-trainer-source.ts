@@ -18,6 +18,7 @@ export class BluetoothTrainerSource implements TrainerSource {
   error = "";
   services: string[] = [];
   features: string[] = [];
+  diagnostics: string[] = [];
   last?: TrainerTelemetrySample;
   private device?: BluetoothDevice;
   private chars: BluetoothRemoteGATTCharacteristic[] = [];
@@ -37,12 +38,19 @@ export class BluetoothTrainerSource implements TrainerSource {
   private notifyChanges() {
     this.changeCallbacks.forEach((callback) => callback());
   }
+  private log(message: string) {
+    this.diagnostics = [
+      ...this.diagnostics.slice(-19),
+      `${new Date().toLocaleTimeString()}: ${message}`,
+    ];
+    this.notifyChanges();
+  }
   getState() {
     return this.state;
   }
   private setState(state: TrainerConnectionState) {
     this.state = state;
-    this.notifyChanges();
+    this.log(`State -> ${state.replaceAll("-", " ")}`);
   }
   subscribe(cb: (s: TrainerTelemetrySample) => void) {
     this.callbacks.add(cb);
@@ -54,6 +62,7 @@ export class BluetoothTrainerSource implements TrainerSource {
     this.generation++;
     this.cleanup();
     this.error = "Trainer disconnected. Reconnect, or switch to the simulator.";
+    this.log("GATT server disconnected event received.");
     this.setState("disconnected");
   };
   private cleanup() {
@@ -71,6 +80,8 @@ export class BluetoothTrainerSource implements TrainerSource {
   }
   async connect(debug = false, preferCps = false, reconnect = false) {
     const available = bluetoothAvailability();
+    this.diagnostics = [...available.details];
+    this.log("Starting Bluetooth trainer connection.");
     if (!available.available) {
       this.error = available.message;
       this.setState("unsupported");
@@ -85,6 +96,11 @@ export class BluetoothTrainerSource implements TrainerSource {
     try {
       if (!reconnect || !this.device) {
         this.setState("requesting-device");
+        this.log(
+          debug
+            ? "Opening chooser with acceptAllDevices and FTMS/CPS optional services."
+            : "Opening chooser filtered to FTMS and Cycling Power services.",
+        );
         this.device = await navigator.bluetooth.requestDevice(
           debug
             ? {
@@ -102,10 +118,12 @@ export class BluetoothTrainerSource implements TrainerSource {
       }
       if (generation !== this.generation) return;
       this.label = this.device.name || "Unnamed trainer";
+      this.log(`Selected device: ${this.label}`);
       this.device.addEventListener("gattserverdisconnected", this.lost);
       this.setState("connecting");
       const server = await this.device.gatt?.connect();
       if (!server) throw new Error("This device has no GATT server.");
+      this.log("GATT server connected.");
       if (generation !== this.generation) {
         server.disconnect();
         return;
@@ -117,6 +135,7 @@ export class BluetoothTrainerSource implements TrainerSource {
         let listener: EventListener | undefined;
         try {
           const ftms = protocol === "ftms";
+          this.log(`Looking for ${ftms ? "FTMS" : "Cycling Power"} service.`);
           const service = await server.getPrimaryService(
             ftms ? U.FTMS_SERVICE : U.CYCLING_POWER_SERVICE,
           );
@@ -124,6 +143,7 @@ export class BluetoothTrainerSource implements TrainerSource {
           this.services.push(
             ftms ? "Fitness Machine (FTMS)" : "Cycling Power (CPS)",
           );
+          this.log(`Found ${ftms ? "FTMS" : "Cycling Power"} service.`);
           try {
             const feature = await (
               await service.getCharacteristic(
@@ -141,11 +161,16 @@ export class BluetoothTrainerSource implements TrainerSource {
                 .map((x) => x.toString(16).padStart(2, "0"))
                 .join(" ")}`,
             );
+            this.log(`Read ${protocol.toUpperCase()} feature bytes.`);
           } catch {
             this.features.push(
               `${protocol.toUpperCase()}: feature read unavailable`,
             );
+            this.log(`${protocol.toUpperCase()} feature read unavailable.`);
           }
+          this.log(
+            `Looking for ${ftms ? "Indoor Bike Data" : "Cycling Power Measurement"} characteristic.`,
+          );
           characteristic = await service.getCharacteristic(
             ftms ? U.INDOOR_BIKE_DATA : U.CYCLING_POWER_MEASUREMENT,
           );
@@ -182,8 +207,13 @@ export class BluetoothTrainerSource implements TrainerSource {
                 }
                 crank = result.crank ?? crank;
               }
+              const firstPacket = !this.last;
               this.last = { ...this.last, ...sample };
               this.error = "";
+              if (firstPacket)
+                this.log(
+                  `First ${protocol.toUpperCase()} telemetry packet received.`,
+                );
               this.callbacks.forEach((cb) => cb(sample));
               this.notifyChanges();
             } catch (error) {
@@ -197,6 +227,7 @@ export class BluetoothTrainerSource implements TrainerSource {
           );
           this.listeners.set(characteristic, listener);
           this.setState("subscribing");
+          this.log(`Starting ${protocol.toUpperCase()} notifications.`);
           await characteristic.startNotifications();
           if (generation !== this.generation) {
             characteristic.removeEventListener(
@@ -209,6 +240,7 @@ export class BluetoothTrainerSource implements TrainerSource {
           if (ftms) this.kind = "bluetooth-ftms";
           else if (!this.chars.some((c) => c.uuid === U.INDOOR_BIKE_DATA))
             this.kind = "bluetooth-cps";
+          this.log(`${protocol.toUpperCase()} notifications active.`);
         } catch (error) {
           if (characteristic && listener) {
             characteristic.removeEventListener(
@@ -217,7 +249,9 @@ export class BluetoothTrainerSource implements TrainerSource {
             );
             this.listeners.delete(characteristic);
           }
-          failures.push(`${protocol.toUpperCase()}: ${bluetoothError(error)}`);
+          const failure = `${protocol.toUpperCase()}: ${bluetoothError(error)}`;
+          failures.push(failure);
+          this.log(failure);
         }
       }
       if (generation !== this.generation) return;
@@ -232,6 +266,7 @@ export class BluetoothTrainerSource implements TrainerSource {
       this.device?.removeEventListener("gattserverdisconnected", this.lost);
       this.device?.gatt?.disconnect();
       this.error = bluetoothError(error);
+      this.log(`Connection failed: ${this.error}`);
       this.setState("error");
     }
   }

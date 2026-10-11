@@ -74,6 +74,13 @@ test("availability and cancellation messages", () => {
   );
   assert.match(
     bluetoothAvailability({
+      isSecureContext: true,
+      navigator: { userAgent: "Mozilla/5.0 Firefox/140.0" },
+    }).message,
+    /Firefox does not implement Web Bluetooth/,
+  );
+  assert.match(
+    bluetoothAvailability({
       isSecureContext: false,
       navigator: { bluetooth: {} },
     }).message,
@@ -137,9 +144,19 @@ test("mock GATT discovery, notifications, disconnect and manual reconnect", asyn
     await trainer.connect();
     assert.equal(trainer.state, "connected");
     assert.deepEqual(trainer.services, ["Fitness Machine (FTMS)"]);
+    assert.ok(
+      trainer.diagnostics.some((entry) =>
+        entry.includes("GATT server connected"),
+      ),
+    );
     characteristic.value = packet([0x41, 0, 0xfa, 0]);
     characteristic.dispatchEvent(new Event("characteristicvaluechanged"));
     assert.equal(watts, 250);
+    assert.ok(
+      trainer.diagnostics.some((entry) =>
+        entry.includes("First FTMS telemetry packet received"),
+      ),
+    );
     device.dispatchEvent(new Event("gattserverdisconnected"));
     assert.equal(trainer.state, "disconnected");
     assert.match(trainer.error, /disconnected/);
