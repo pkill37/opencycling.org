@@ -3,11 +3,9 @@
   min-height: 100svh;
   isolation: isolate;
   overflow: hidden;
-}
-.poster {
-  object-fit: cover;
-  object-position: center;
-  z-index: -3;
+  background:
+    radial-gradient(circle at 18% 20%, #375748 0, transparent 34%),
+    radial-gradient(circle at 78% 70%, #243f38 0, transparent 38%), #10231f;
 }
 .world {
   position: absolute;
@@ -21,6 +19,65 @@
   height: 100%;
   cursor: grab;
   touch-action: none;
+}
+.zombieOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+.zombieOverlay::before,
+.zombieOverlay::after {
+  position: absolute;
+  content: "";
+  inset: 0;
+}
+.zombieOverlay::before {
+  background: radial-gradient(
+    circle at 50% 45%,
+    transparent 38%,
+    #ffcf3330 78%
+  );
+}
+.zombieOverlay::after {
+  opacity: 0.55;
+  background:
+    linear-gradient(115deg, transparent 0 45%, #fff1 46% 47%, transparent 48%),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 16px,
+      #fff2 17px,
+      transparent 18px 34px
+    );
+  animation: zombiePulse 1.2s ease-in-out infinite;
+}
+.zombieOverlayDanger::before {
+  background: radial-gradient(
+    circle at 50% 45%,
+    transparent 28%,
+    #ff3b2f55 82%
+  );
+}
+.zombieOverlayDanger::after {
+  animation-duration: 0.55s;
+  opacity: 0.8;
+}
+.zombieOverlayCaught::before {
+  background: radial-gradient(circle at 50% 45%, #ff3b2f18 18%, #b50000aa 88%);
+}
+.zombieOverlayCaught::after {
+  animation-duration: 0.35s;
+  opacity: 1;
+}
+@keyframes zombiePulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 .shade {
   position: absolute;
@@ -220,6 +277,31 @@
 }
 .selected > span:last-child {
   color: var(--accent);
+}
+.modeSelect {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+.modeSelect button {
+  text-align: left;
+  border: 1px solid var(--line);
+  background: #ffffff03;
+  border-radius: 10px;
+  padding: 13px;
+}
+.modeSelect strong,
+.modeSelect small {
+  display: block;
+}
+.modeSelect strong {
+  font-size: 12px;
+}
+.modeSelect small {
+  color: var(--muted);
+  font-size: 9px;
+  margin-top: 5px;
 }
 .setup > .support {
   min-height: 5.1em;
@@ -436,6 +518,61 @@
   letter-spacing: 1px;
   color: var(--muted);
 }
+.zombieHud {
+  position: absolute;
+  right: 24px;
+  top: 330px;
+  width: 220px;
+  background: #1f1616ea;
+  border: 1px solid #a8ff7a55;
+  border-radius: 15px;
+  padding: 18px 20px;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 10px 35px #0005;
+}
+.zombieHud > span:first-child,
+.zombieHud small,
+.zombieHud > span:last-child {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+}
+.zombieHud strong {
+  display: block;
+  color: #b9ff8a;
+  font-size: 58px;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -2px;
+}
+.zombieHud strong small {
+  display: inline;
+  margin-left: 5px;
+  font-size: 18px;
+  letter-spacing: 0;
+}
+.zombieHud > span:last-child {
+  margin-top: 12px;
+}
+.zombieSafe {
+  border-color: #a8ff7a55;
+}
+.zombieWarning {
+  border-color: #ffd36a99;
+}
+.zombieWarning strong {
+  color: #ffd36a;
+}
+.zombieDanger,
+.zombieCaught {
+  border-color: #ff6f6fcc;
+  background: #351616ef;
+}
+.zombieDanger strong,
+.zombieCaught strong {
+  color: #ff8d7a;
+}
 .controls {
   position: absolute;
   bottom: max(24px, env(safe-area-inset-bottom));
@@ -587,6 +724,15 @@
   .routeHud {
     width: 290px;
   }
+  .zombieHud {
+    right: 12px;
+    top: 360px;
+    width: 150px;
+    padding: 14px;
+  }
+  .zombieHud strong {
+    font-size: 38px;
+  }
   .routeHud .metric strong {
     font-size: 20px;
   }
@@ -672,6 +818,16 @@
     top: 80px;
     width: 150px;
     padding: 14px;
+  }
+  .zombieHud {
+    top: auto;
+    right: 12px;
+    bottom: 72px;
+    width: 170px;
+    padding: 10px 12px;
+  }
+  .zombieHud strong {
+    font-size: 34px;
   }
   .routeHud > div {
     flex-direction: column;

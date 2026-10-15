@@ -1,6 +1,7 @@
 import * as T from "three";
 import { route, lookupRoute, terrainHeight } from "../route/route";
 import type { RideEngine } from "../loop/engine";
+import type { ZombiesSnapshot } from "../modes/zombies";
 import { addScenery, surfaceTexture } from "./scenery";
 import { createRider } from "./rider";
 import { worldTexture } from "./textures";
@@ -75,6 +76,90 @@ function addStartGate(scene: T.Scene) {
   scene.add(gate);
 }
 
+function zombieVariant(index: number) {
+  const variants = [
+    {
+      skin: 0x9bff74,
+      shirt: 0x5d2d2d,
+      height: 1,
+      width: 1,
+      head: 1,
+      hunch: -0.1,
+    },
+    {
+      skin: 0xc3ff75,
+      shirt: 0x263f5d,
+      height: 0.88,
+      width: 1.18,
+      head: 1.08,
+      hunch: -0.22,
+    },
+    {
+      skin: 0x79d95b,
+      shirt: 0x4d3a22,
+      height: 1.12,
+      width: 0.86,
+      head: 0.92,
+      hunch: -0.04,
+    },
+    {
+      skin: 0xd6f08a,
+      shirt: 0x60325e,
+      height: 0.96,
+      width: 0.98,
+      head: 1.18,
+      hunch: -0.16,
+    },
+  ];
+  return variants[index % variants.length];
+}
+
+function createZombie(index: number) {
+  const variant = zombieVariant(index);
+  const group = new T.Group(),
+    skin = new T.MeshStandardMaterial({ color: variant.skin, roughness: 0.85 }),
+    shirt = new T.MeshStandardMaterial({
+      color: variant.shirt,
+      roughness: 0.9,
+    }),
+    dark = new T.MeshStandardMaterial({ color: 0x151915, roughness: 1 });
+  const body = new T.Mesh(
+      new T.CapsuleGeometry(0.28 * variant.width, 0.7 * variant.height, 4, 8),
+      shirt,
+    ),
+    head = new T.Mesh(new T.SphereGeometry(0.24 * variant.head, 12, 8), skin),
+    leftArm = new T.Mesh(
+      new T.BoxGeometry(0.14, 0.78 * variant.height, 0.14),
+      skin,
+    ),
+    rightArm = leftArm.clone(),
+    leftLeg = new T.Mesh(
+      new T.BoxGeometry(0.16, 0.72 * variant.height, 0.16),
+      dark,
+    ),
+    rightLeg = leftLeg.clone();
+  body.position.y = 0.9 * variant.height;
+  body.rotation.x = variant.hunch;
+  head.position.y = 1.48 * variant.height;
+  head.position.z = -variant.hunch * 0.35;
+  leftArm.position.set(-0.36 * variant.width, 0.98 * variant.height, -0.12);
+  rightArm.position.set(0.36 * variant.width, 0.98 * variant.height, -0.12);
+  leftArm.rotation.x = rightArm.rotation.x = -0.95 + variant.hunch;
+  leftArm.rotation.z = -0.22 - index * 0.04;
+  rightArm.rotation.z = 0.22 + index * 0.04;
+  leftLeg.position.set(-0.13 * variant.width, 0.34 * variant.height, 0);
+  rightLeg.position.set(0.13 * variant.width, 0.34 * variant.height, 0);
+  for (const part of [body, head, leftArm, rightArm, leftLeg, rightLeg]) {
+    part.castShadow = true;
+    group.add(part);
+  }
+  group.userData.leftArm = leftArm;
+  group.userData.rightArm = rightArm;
+  group.userData.leftLeg = leftLeg;
+  group.userData.rightLeg = rightLeg;
+  return group;
+}
+
 function createGround() {
   const geometry = new T.PlaneGeometry(2000, 2000, 160, 160);
   geometry.rotateX(-Math.PI / 2);
@@ -94,7 +179,11 @@ function createGround() {
   return geometry;
 }
 
-export function createWorld(host: HTMLElement, engine: RideEngine) {
+export function createWorld(
+  host: HTMLElement,
+  engine: RideEngine,
+  getZombies?: () => ZombiesSnapshot,
+) {
   const scene = new T.Scene();
   scene.background = new T.Color("#bfd7e5");
   scene.fog = new T.Fog("#bfd7e5", 350, 2200);
@@ -181,6 +270,12 @@ export function createWorld(host: HTMLElement, engine: RideEngine) {
   addStartGate(scene);
   const rider = createRider();
   scene.add(rider.group);
+  const zombieMeshes = Array.from({ length: 4 }, (_, index) => {
+    const zombie = createZombie(index);
+    zombie.visible = false;
+    scene.add(zombie);
+    return zombie;
+  });
   let cameraMode = 0,
     initialized = false,
     qualityTime = 0,
@@ -298,6 +393,58 @@ export function createWorld(host: HTMLElement, engine: RideEngine) {
         moving ? state.cadenceRpm : 0,
         state.speedMetersPerSecond,
       );
+      const zombieSnapshot = getZombies?.(),
+        visibleZombieCount = zombieSnapshot?.caught
+          ? 4
+          : zombieSnapshot?.threat === "danger"
+            ? Math.min(
+                4,
+                Math.max(2, 5 - Math.ceil(zombieSnapshot.nearestGapMeters / 6)),
+              )
+            : zombieSnapshot?.threat === "warning"
+              ? Math.min(
+                  3,
+                  Math.max(
+                    1,
+                    4 - Math.ceil(zombieSnapshot.nearestGapMeters / 10),
+                  ),
+                )
+              : 0,
+        activeZombies =
+          zombieSnapshot?.threat === "warning" ||
+          zombieSnapshot?.threat === "danger" ||
+          zombieSnapshot?.threat === "caught"
+            ? zombieSnapshot.zombies
+            : [];
+      zombieMeshes.forEach((mesh, index) => {
+        const zombie = activeZombies[index] ?? activeZombies[0];
+        mesh.visible = index < visibleZombieCount && !!zombie;
+        if (!zombie) return;
+        const routeDistance = route.distanceMeters,
+          visualGap =
+            zombieSnapshot?.threat === "danger" ||
+            zombieSnapshot?.threat === "caught"
+              ? 1.35 + index * 0.28
+              : 2.2 + index * 0.35,
+          visualDistance = state.distanceMeters - visualGap,
+          wrappedDistance =
+            ((visualDistance % routeDistance) + routeDistance) % routeDistance,
+          z = lookupRoute(wrappedDistance);
+        const stagger = index % 2 === 0 ? -2.35 : 2.35,
+          bob = Math.sin(state.elapsedSeconds * 9 + index) * 0.08;
+        mesh.position.set(
+          z.x + Math.cos(z.heading) * stagger,
+          z.y + bob,
+          z.z - Math.sin(z.heading) * stagger,
+        );
+        mesh.rotation.set(-Math.atan(z.gradient), z.heading, 0, "YXZ");
+        mesh.scale.setScalar(zombieSnapshot?.threat === "warning" ? 0.95 : 1.1);
+        const stride = Math.sin(state.elapsedSeconds * 11 + index);
+        (mesh.userData.leftArm as T.Mesh).rotation.x = -0.95 + stride * 0.35;
+        (mesh.userData.rightArm as T.Mesh).rotation.x = -0.95 - stride * 0.35;
+        (mesh.userData.leftLeg as T.Mesh).rotation.x = stride * 0.45;
+        (mesh.userData.rightLeg as T.Mesh).rotation.x = -stride * 0.45;
+      });
       const ahead = lookupRoute(
           (state.distanceMeters + 12) % route.distanceMeters,
         ),

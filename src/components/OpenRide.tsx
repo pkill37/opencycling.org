@@ -1,6 +1,5 @@
 "use client";
 import Link from "next/link";
-import Image from "next/image";
 import {
   useCallback,
   useEffect,
@@ -10,6 +9,7 @@ import {
 } from "react";
 import { route } from "@/game/route/route";
 import { RideEngine } from "@/game/loop/engine";
+import { ZombiesMode, noZombies } from "@/game/modes/zombies";
 import { SimulatorSource } from "@/bluetooth/sources/simulator-source";
 import { BluetoothTrainerSource } from "@/bluetooth/sources/bluetooth-trainer-source";
 import { bluetoothAvailability } from "@/bluetooth/availability";
@@ -29,6 +29,7 @@ const profilePath = profilePoints
   .map((p, i) => `${i ? "L" : "M"}${i * 4},${(60 - (p.y - 1) * 2).toFixed(3)}`)
   .join(" ");
 const presets = [100, 150, 200, 250, 300, 400, 500, 600, 800];
+type GameMode = "ride" | "zombies";
 export default function OpenRide({
   initialSetup = false,
 }: {
@@ -39,7 +40,8 @@ export default function OpenRide({
     [trainer] = useState(() => new BluetoothTrainerSource());
   const [phase, setPhase] = useState<"home" | "ride" | "summary">("home"),
     [setup, setSetup] = useState(initialSetup),
-    [source, setSource] = useState<"simulator" | "bluetooth">("simulator");
+    [source, setSource] = useState<"simulator" | "bluetooth">("simulator"),
+    [mode, setMode] = useState<GameMode>("ride");
   const hydrated = useSyncExternalStore(
     subscribeToHydration,
     getClientSnapshot,
@@ -66,11 +68,17 @@ export default function OpenRide({
     [worldError, setWorldError] = useState(""),
     [warning, setWarning] = useState(""),
     [debugScan, setDebugScan] = useState(false),
-    [cps, setCps] = useState(false);
+    [cps, setCps] = useState(false),
+    [zombies, setZombies] = useState(noZombies),
+    [summaryReason, setSummaryReason] = useState<
+      "finished" | "caught" | "ended"
+    >("ended");
   const host = useRef<HTMLDivElement>(null),
     world = useRef<Awaited<
       ReturnType<typeof import("@/game/world/scene").createWorld>
-    > | null>(null);
+    > | null>(null),
+    zombiesMode = useRef<ZombiesMode | null>(null),
+    zombiesSnapshot = useRef(noZombies);
   useEffect(() => {
     const unsubscribe = trainer.subscribeChanges(() => refresh((x) => x + 1));
     return () => {
@@ -115,10 +123,21 @@ export default function OpenRide({
     setHud(true);
     setWarning("");
     setWorldError("");
+    setSummaryReason("ended");
+    if (mode === "zombies") {
+      zombiesMode.current = new ZombiesMode(next.state.distanceMeters);
+      zombiesSnapshot.current = zombiesMode.current.snapshot;
+      setZombies(zombiesSnapshot.current);
+    } else {
+      zombiesMode.current = null;
+      zombiesSnapshot.current = noZombies;
+      setZombies(noZombies);
+    }
     setPhase("ride");
   };
   const finish = useCallback(() => {
     activeEngine.setPaused(true);
+    setSummaryReason("ended");
     setSummary(activeEngine.summary());
     setPhase("summary");
   }, [activeEngine]);
@@ -144,7 +163,7 @@ export default function OpenRide({
         await preloadWorldTextures();
         if (stopped) return;
         try {
-          view = createWorld(element, e);
+          view = createWorld(element, e, () => zombiesSnapshot.current);
           world.current = view;
           setWorldLoading(false);
           last = performance.now();
@@ -161,15 +180,29 @@ export default function OpenRide({
           if (stopped) return;
           const dt = Math.min((now - last) / 1000, 0.25);
           last = now;
-          if (!document.hidden) e.advance(dt);
+          if (!document.hidden) {
+            e.advance(dt);
+            zombiesMode.current?.advance(dt, e.state);
+          }
           if (!document.hidden) view?.render(dt);
           if (now - published > 100) {
+            zombiesSnapshot.current =
+              zombiesMode.current?.snapshot ?? noZombies;
             setSnapshot({ ...e.state });
+            setZombies(zombiesSnapshot.current);
             setPaused(e.paused);
             setWarning(e.warning);
             setFps(Math.round(1 / Math.max(dt, 0.001)));
             published = now;
+            if (zombiesSnapshot.current.caught) {
+              e.setPaused(true);
+              setSummaryReason("caught");
+              setSummary(e.summary());
+              setPhase("summary");
+              return;
+            }
             if (phase === "ride" && e.completed) {
+              setSummaryReason("finished");
               setSummary(e.summary());
               setPhase("summary");
               return;
@@ -279,21 +312,23 @@ export default function OpenRide({
   );
   return (
     <main className={styles.app}>
-      {phase === "home" && (
-        <Image
-          src="/cedar-valley.webp"
-          alt=""
-          fill
-          preload
-          sizes="100vw"
-          className={styles.poster}
-        />
-      )}
       {phase === "ride" && (
         <div
           ref={host}
           className={styles.world}
           aria-label="Cedar Valley 3D cycling world"
+        />
+      )}
+      {phase === "ride" && mode === "zombies" && zombies.threat !== "safe" && (
+        <div
+          className={`${styles.zombieOverlay} ${
+            zombies.threat === "danger"
+              ? styles.zombieOverlayDanger
+              : zombies.threat === "caught"
+                ? styles.zombieOverlayCaught
+                : styles.zombieOverlayWarning
+          }`}
+          aria-hidden="true"
         />
       )}
       {phase === "home" && (
@@ -302,7 +337,6 @@ export default function OpenRide({
           <header className={styles.header}>
             <Link href="/" prefetch={false} className={styles.logo}>
               <span>◒</span> openride
-              <span className={styles.alpha}>MVP / 01</span>
             </Link>
             <span className={styles.local}>● NO ACCOUNTS. JUST A RIDE.</span>
           </header>
@@ -391,6 +425,22 @@ export default function OpenRide({
                 </div>
                 <span>{source === "simulator" ? "✓" : "↗"}</span>
               </button>
+              <div className={styles.modeSelect} aria-label="Ride mode">
+                <button
+                  className={mode === "ride" ? styles.selected : ""}
+                  onClick={() => setMode("ride")}
+                >
+                  <strong>Open Ride</strong>
+                  <small>Classic solo loop</small>
+                </button>
+                <button
+                  className={mode === "zombies" ? styles.selected : ""}
+                  onClick={() => setMode("zombies")}
+                >
+                  <strong>Zombies Mode</strong>
+                  <small>Stay ahead of the horde</small>
+                </button>
+              </div>
               <p className={styles.support}>{availability.message}</p>
               {!availability.available && (
                 <div className={styles.connection} aria-live="polite">
@@ -479,9 +529,6 @@ export default function OpenRide({
           </section>
           <footer className={styles.footer}>
             <span>BUILT FOR THE SIMPLE JOY OF RIDING.</span>
-            <span>
-              CEDAR VALLEY / {route.distanceMeters.toFixed(0)} M OF POSSIBILITY
-            </span>
           </footer>
         </>
       )}
@@ -493,6 +540,7 @@ export default function OpenRide({
                 <span className={styles.logo}>◒ openride</span>
                 <span>{route.name}</span>
                 <span className={styles.live}>
+                  {mode === "zombies" ? "☣ ZOMBIES · " : ""}
                   {source === "simulator"
                     ? "● SIMULATOR"
                     : `● ${trainer.label}`}
@@ -562,6 +610,37 @@ export default function OpenRide({
                   </span>
                 </small>
               </div>
+              {mode === "zombies" && (
+                <div
+                  className={`${styles.zombieHud} ${
+                    zombies.threat === "danger"
+                      ? styles.zombieDanger
+                      : zombies.threat === "warning"
+                        ? styles.zombieWarning
+                        : zombies.threat === "caught"
+                          ? styles.zombieCaught
+                          : styles.zombieSafe
+                  }`}
+                >
+                  <span>ZOMBIES</span>
+                  <strong>
+                    {Number.isFinite(zombies.nearestGapMeters)
+                      ? Math.max(0, Math.round(zombies.nearestGapMeters))
+                      : "—"}
+                    <small>m</small>
+                  </strong>
+                  <small>
+                    {zombies.threat === "caught"
+                      ? "CAUGHT"
+                      : zombies.threat === "danger"
+                        ? "SPRINT NOW"
+                        : zombies.threat === "warning"
+                          ? "CLOSING FAST"
+                          : "BEHIND YOU"}
+                  </small>
+                  <span>Score {zombies.score}</span>
+                </div>
+              )}
             </div>
           )}
           {warning && (
@@ -653,14 +732,26 @@ export default function OpenRide({
             ◒ openride
           </Link>
           <div className={styles.eyebrow}>
-            {activeEngine.completed
-              ? "ONE LOOP. WELL RIDDEN."
-              : "EVERY TURN COUNTS."}
+            {summaryReason === "caught"
+              ? "THE HORDE CAUGHT YOU."
+              : activeEngine.completed
+                ? "ONE LOOP. WELL RIDDEN."
+                : "EVERY TURN COUNTS."}
           </div>
-          <h1>{activeEngine.completed ? "You made it." : "Ride wrapped."}</h1>
+          <h1>
+            {summaryReason === "caught"
+              ? "Caught by zombies."
+              : activeEngine.completed
+                ? "You made it."
+                : "Ride wrapped."}
+          </h1>
           <p>
-            {route.name} ·{" "}
-            {activeEngine.completed ? "Route complete" : "Ride ended early"}
+            {route.name} · {mode === "zombies" ? "Zombies Mode · " : ""}
+            {summaryReason === "caught"
+              ? `Survived ${time(zombies.survivedSeconds)}`
+              : activeEngine.completed
+                ? "Route complete"
+                : "Ride ended early"}
           </p>
           <div className={styles.summaryGrid}>
             {metric(
