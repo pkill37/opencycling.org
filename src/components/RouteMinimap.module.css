@@ -1,0 +1,36 @@
+.map {
+  composes: panel from "./Hud.module.css";
+  position: absolute;
+  left: max(24px, env(safe-area-inset-left));
+  bottom: calc(90px + env(safe-area-inset-bottom));
+  width: 240px;
+  padding: 12px;
+  pointer-events: none;
+}
+.heading {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+}
+.map svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+@media (max-width: 760px) {
+  .map {
+    left: max(12px, env(safe-area-inset-left));
+    bottom: calc(152px + env(safe-area-inset-bottom));
+    width: 150px;
+    padding: 8px;
+  }
+}
+@media (max-height: 540px) and (orientation: landscape) {
+  .map {
+    bottom: calc(64px + env(safe-area-inset-bottom));
+    width: 110px;
+    padding: 6px;
+  }
+}

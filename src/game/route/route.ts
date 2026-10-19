@@ -1,49 +1,54 @@
-import { CatmullRomCurve3, Vector3 } from "three";
 import type { CyclingRoute, RoutePoint } from "../../types";
+
+// Explicit synthetic fallback for exercising the runtime while curated data is reviewed.
 export function terrainHeight(x: number, z: number) {
   return 12 + 9 * Math.sin(x / 150) * Math.cos(z / 190) + 4 * Math.sin(z / 105);
 }
-const controls = Array.from({ length: 16 }, (_, i) => {
-  const a = (i / 16) * Math.PI * 2,
-    x = Math.sin(a) * (270 + 35 * Math.cos(a * 3)),
-    z = Math.cos(a) * (225 + 25 * Math.sin(a * 2));
-  return new Vector3(x, terrainHeight(x, z) + 0.18, z);
-});
-export const curve = new CatmullRomCurve3(controls, true, "centripetal");
-curve.arcLengthDivisions = 4000;
 const points: RoutePoint[] = [];
 let distance = 0,
   gain = 0;
 for (let i = 0; i <= 1600; i++) {
-  const p = curve.getPointAt(i / 1600);
-  if (i) {
-    const prev = points[i - 1];
-    distance += Math.hypot(p.x - prev.x, p.y - prev.y, p.z - prev.z);
-    gain += Math.max(0, p.y - prev.y);
+  const a = (i / 1600) * Math.PI * 2;
+  const x = Math.sin(a) * 270,
+    z = Math.cos(a) * 225;
+  const y = terrainHeight(x, z);
+  const prev = points[i - 1];
+  if (prev) {
+    distance += Math.hypot(x - prev.x, y - prev.y, z - prev.z);
+    gain += Math.max(0, y - prev.y);
   }
   points.push({
-    x: p.x,
-    y: p.y,
-    z: p.z,
+    x,
+    y,
+    z,
     distanceMeters: distance,
-    elevationMeters: p.y,
+    elevationMeters: y,
     gradient: 0,
   });
 }
-for (let i = 0; i < points.length; i++) {
-  const a = points[Math.max(0, i - 1)],
-    b = points[Math.min(points.length - 1, i + 1)];
-  points[i].gradient =
-    (b.y - a.y) / Math.max(0.001, Math.hypot(b.x - a.x, b.z - a.z));
+for (let i = 0; i < points.length - 1; i++) {
+  const a = points[i],
+    b = points[i + 1];
+  a.gradient = (b.y - a.y) / Math.hypot(b.x - a.x, b.z - a.z);
 }
 export const route: CyclingRoute = {
-  id: "cedar-valley",
-  name: "Cedar Valley Loop",
+  id: "synthetic-demo",
+  name: "Synthetic training loop",
   distanceMeters: distance,
   elevationGainMeters: gain,
   loop: true,
   points,
+  metadata: {
+    version: "demo-1",
+    context: "Synthetic fixture, not a real course. One lap.",
+    quality: "Synthetic — geographic accuracy not applicable",
+    warnings: [
+      "Curated Alpe d’Huez, Marseille and Paris packages await source and reference review.",
+    ],
+    attribution: "OpenRide procedural fixture",
+  },
 };
+
 export function lookupRoute(distanceMeters: number, r: CyclingRoute = route) {
   const d = Math.max(0, Math.min(distanceMeters, r.distanceMeters));
   let lo = 0,
@@ -54,19 +59,20 @@ export function lookupRoute(distanceMeters: number, r: CyclingRoute = route) {
     else hi = mid;
   }
   const a = r.points[lo],
-    b = r.points[hi],
-    t =
-      (d - a.distanceMeters) /
-      Math.max(0.0001, b.distanceMeters - a.distanceMeters),
-    mix = (a: number, b: number) => a + (b - a) * t;
+    b = r.points[hi];
+  const t = (d - a.distanceMeters) / (b.distanceMeters - a.distanceMeters);
+  const mix = (a: number, b: number) => a + (b - a) * t;
   return {
     x: mix(a.x, b.x),
     y: mix(a.y, b.y),
     z: mix(a.z, b.z),
     elevationMeters: mix(a.elevationMeters, b.elevationMeters),
-    gradient: mix(a.gradient, b.gradient),
+    // The rendered reference line is piecewise linear: use its exact slope.
+    gradient: (b.y - a.y) / Math.hypot(b.x - a.x, b.z - a.z),
+    curvature: Math.max(Math.abs(a.curvature ?? 0), Math.abs(b.curvature ?? 0)),
     heading: Math.atan2(b.x - a.x, b.z - a.z),
     progress: d / r.distanceMeters,
     remainingDistanceMeters: r.distanceMeters - d,
+    index: lo,
   };
 }

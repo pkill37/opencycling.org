@@ -17,18 +17,17 @@ test("landing content and SEO are present without JavaScript", async ({
   );
   await expect(page.locator("h1")).toHaveCount(1);
   await expect(
-    page.getByRole("heading", { name: "Cedar Valley Loop" }),
+    page.getByRole("heading", { name: "Synthetic training loop" }),
   ).toBeVisible();
   await expect(page.locator("noscript p")).toBeVisible();
-  expect(
-    await page
-      .locator("img")
-      .evaluate(
-        (img: HTMLImageElement) => img.complete && img.naturalWidth > 0,
-      ),
-  ).toBe(true);
+  await expect(
+    page.getByRole("img", {
+      name: "Synthetic training loop elevation profile",
+    }),
+  ).toBeVisible();
+  await expect(page.locator("canvas")).toHaveCount(0);
   await page.goto("/ride/");
-  await expect(page).toHaveTitle("Ride Cedar Valley | OpenRide");
+  await expect(page).toHaveTitle("Set up a ride | OpenRide");
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
     "content",
     "noindex, follow",

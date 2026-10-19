@@ -22,7 +22,7 @@ export const metadata: Metadata = {
               url: "/cedar-valley.webp",
               width: 1440,
               height: 1000,
-              alt: "Cedar Valley virtual cycling route",
+              alt: "Illustrative virtual cycling landscape",
             },
           ],
         }

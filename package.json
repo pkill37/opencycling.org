@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "route:build": "tsx scripts/build-route.ts",
+    "route:alpe": "tsx scripts/build-alpe.ts",
     "dev": "next dev",
     "dev:https": "next dev --experimental-https",
     "build": "next build",
@@ -17,6 +19,7 @@
     "check": "npm run lint && npm run typecheck && npm run format:check && npm test"
   },
   "dependencies": {
+    "fast-xml-parser": "^5.11.2",
     "next": "^16.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

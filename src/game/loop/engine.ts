@@ -1,10 +1,16 @@
-import type { RiderState, RideSummary, CyclingRoute } from "../../types";
+import type {
+  RiderState,
+  RideSummary,
+  CyclingRoute,
+  PhysicsConfig,
+} from "../../types";
 import type {
   TrainerSource,
   TrainerTelemetrySample,
 } from "../../bluetooth/types";
 import { route, lookupRoute } from "../route/route";
-import { stepPhysics } from "../physics/cycling";
+import { stepPhysics, defaultPhysicsConfig } from "../physics/cycling";
+import { brakingEnvelope } from "../physics/cornering";
 export class RideEngine {
   state: RiderState = {
     distanceMeters: 0,
@@ -28,7 +34,12 @@ export class RideEngine {
   private peak = 0;
   private gain = 0;
   private accumulator = 0;
-  constructor(public course: CyclingRoute = route) {
+  private speedLimits: number[];
+  constructor(
+    public course: CyclingRoute = route,
+    public config: PhysicsConfig = { ...defaultPhysicsConfig },
+  ) {
+    this.speedLimits = brakingEnvelope(course, config);
     const p = lookupRoute(0, course);
     this.state.elevationMeters = p.elevationMeters;
     this.state.gradient = p.gradient;
@@ -125,8 +136,53 @@ export class RideEngine {
   step(dt: number, power: number, cadence: number) {
     if (this.paused || this.completed) return;
     const s = this.state,
-      p = lookupRoute(s.distanceMeters, this.course),
-      next = stepPhysics(s.speedMetersPerSecond, power, p.gradient, dt);
+      p = lookupRoute(s.distanceMeters, this.course);
+    const a = this.course.points[p.index],
+      b = this.course.points[p.index + 1];
+    const t =
+      (s.distanceMeters - a.distanceMeters) /
+      (b.distanceMeters - a.distanceMeters);
+    const target = Math.sqrt(
+      this.speedLimits[p.index] ** 2 * (1 - t) +
+        this.speedLimits[p.index + 1] ** 2 * t,
+    );
+    const free = stepPhysics(
+      s.speedMetersPerSecond,
+      power,
+      p.gradient,
+      dt,
+      this.config,
+      p.heading,
+    );
+    const braking = this.config.automaticBraking && free.speed > target;
+    const mass = this.config.riderMassKg + this.config.bikeMassKg;
+    // Cut propulsion while braking. Brake force is bounded, never teleport speed.
+    const coast = stepPhysics(
+      s.speedMetersPerSecond,
+      0,
+      p.gradient,
+      dt,
+      this.config,
+      p.heading,
+    );
+    const force = braking
+      ? mass *
+        Math.min(
+          this.config.brakingDeceleration,
+          Math.max(0, (coast.speed - target) / dt),
+        )
+      : 0;
+    const next = braking
+      ? stepPhysics(
+          s.speedMetersPerSecond,
+          0,
+          p.gradient,
+          dt,
+          this.config,
+          p.heading,
+          force,
+        )
+      : free;
     const remaining = this.course.distanceMeters - s.distanceMeters,
       fraction = next.distance > remaining ? remaining / next.distance : 1,
       used = dt * fraction;
@@ -146,6 +202,10 @@ export class RideEngine {
       elevationMeters: position.elevationMeters,
       gradient: position.gradient,
       elapsedSeconds: s.elapsedSeconds + used,
+      braking: force > 0,
+      brakingEnergyJoules:
+        (s.brakingEnergyJoules ?? 0) + force * next.distance * fraction,
+      targetSpeedMetersPerSecond: target,
     });
     if (s.distanceMeters >= this.course.distanceMeters) {
       this.completed = true;

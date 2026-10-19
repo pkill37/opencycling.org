@@ -1,6 +1,6 @@
 export const siteTitle = "OpenRide — Open source virtual cycling";
 export const siteDescription =
-  "Ride Cedar Valley in your browser. Connect a Bluetooth smart trainer or use the keyboard simulator. An open source virtual cycling world with no account required.";
+  "Ride a GPX reference course in your browser. Connect a Bluetooth smart trainer or use the keyboard simulator. Open source cycling simulation with explicit data and physics assumptions.";
 
 export function parseSiteUrl(value: string | undefined): URL | undefined {
   if (!value?.trim()) return undefined;

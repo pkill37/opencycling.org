@@ -211,11 +211,40 @@
   padding: 12px 0;
 }
 .setup {
+  min-width: 0;
   background: #172c29ee;
   border: 1px solid #c1d3b932;
   border-radius: var(--radius);
   padding: 28px;
   box-shadow: 0 24px 60px #06141144;
+}
+.setup > label,
+.setup details label {
+  display: block;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.setup select,
+.setup input[type="file"],
+.setup input[type="number"] {
+  max-width: 100%;
+  width: 100%;
+  color: inherit;
+  background: #172c29;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 6px;
+}
+.setup > details {
+  margin: 16px 0;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.setup > details button {
+  border: 1px solid var(--line);
+  padding: 8px;
+  margin: 4px;
 }
 .cardHeading {
   display: flex;
@@ -271,7 +300,8 @@
   color: var(--muted);
   margin-top: 4px;
 }
-.selected {
+.sourceButton.selected,
+.modeSelect button.selected {
   border-color: #d9f77e90;
   background: #d9f77e0a;
 }
@@ -392,6 +422,9 @@
   margin: 4px 0;
 }
 .rideHud {
+  text-shadow:
+    0 1px 4px #000,
+    0 0 8px #0009;
   height: 100svh;
   position: relative;
   z-index: 1;
@@ -404,13 +437,15 @@
   pointer-events: auto;
 }
 .topbar {
+  composes: panel from "./Hud.module.css";
+  --hud-background: 24 44 41;
+  --hud-radius: 12px;
+  border: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   text-shadow: 0 1px 8px #000;
-  background: #182c29d9;
-  border-radius: 12px;
   padding: 12px 20px;
 }
 .topbar > span:nth-child(2) {
@@ -431,10 +466,8 @@
   width: 220px;
 }
 .power {
-  background: #152b27e8;
-  border: 1px solid #ffffff25;
+  composes: panel from "./Hud.module.css";
   padding: 17px 24px;
-  border-radius: 15px;
   display: flex;
   flex-direction: column;
 }
@@ -460,13 +493,11 @@
   margin-left: 8px;
 }
 .primaryMetrics {
+  composes: panel from "./Hud.module.css";
   display: flex;
   flex-wrap: wrap;
   gap: 14px 22px;
   padding: 18px 24px;
-  background: #152b27e8;
-  border-radius: 15px;
-  border: 1px solid #ffffff25;
 }
 .primaryMetrics > .metric:first-child {
   width: 100%;
@@ -482,9 +513,6 @@
   right: 24px;
   top: 110px;
   width: 340px;
-  background: #152b27e8;
-  border: 1px solid #ffffff25;
-  border-radius: 15px;
   padding: 20px;
 }
 .routeHud > div {
@@ -519,16 +547,15 @@
   color: var(--muted);
 }
 .zombieHud {
+  composes: panel from "./Hud.module.css";
+  --hud-background: 31 22 22;
+  --hud-border: #a8ff7a55;
   position: absolute;
   right: 24px;
   top: 330px;
   width: 220px;
-  background: #1f1616ea;
-  border: 1px solid #a8ff7a55;
-  border-radius: 15px;
   padding: 18px 20px;
   font-variant-numeric: tabular-nums;
-  box-shadow: 0 10px 35px #0005;
 }
 .zombieHud > span:first-child,
 .zombieHud small,
@@ -556,18 +583,18 @@
   margin-top: 12px;
 }
 .zombieSafe {
-  border-color: #a8ff7a55;
+  --hud-border: #a8ff7a55;
 }
 .zombieWarning {
-  border-color: #ffd36a99;
+  --hud-border: #ffd36a99;
 }
 .zombieWarning strong {
   color: #ffd36a;
 }
 .zombieDanger,
 .zombieCaught {
-  border-color: #ff6f6fcc;
-  background: #351616ef;
+  --hud-border: #ff6f6fcc;
+  --hud-background: 53 22 22;
 }
 .zombieDanger strong,
 .zombieCaught strong {
@@ -584,15 +611,17 @@
   align-items: center;
 }
 .controlGroup {
+  composes: panel from "./Hud.module.css";
+  --hud-background: 20 43 39;
+  --hud-border: var(--line);
+  --hud-radius: 12px;
   display: flex;
   align-items: center;
   gap: 4px;
-  background: #142b27ed;
   padding: 5px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
 }
 .controlGroup button {
+  text-shadow: inherit;
   border: 0;
   background: transparent;
   min-width: 44px;
@@ -616,14 +645,15 @@
   font-size: 13px;
 }
 .pauseCard {
+  composes: panel from "./Hud.module.css";
+  --hud-background: 22 43 39;
+  --hud-border: var(--line);
+  --hud-radius: 18px;
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   padding: 28px;
-  background: #162b27f5;
-  border: 1px solid var(--line);
-  border-radius: 18px;
   min-width: 290px;
   text-align: center;
 }
@@ -632,18 +662,19 @@
   margin: 15px 0 25px;
 }
 .warning {
+  composes: panel from "./Hud.module.css";
+  --hud-background: 98 74 36;
+  --hud-radius: 12px;
+  border: 0;
   position: absolute;
   z-index: 5;
   left: 50%;
   top: 85px;
   transform: translateX(-50%);
   width: min(560px, 90%);
-  background: #624a24f5;
   color: #fff1cb;
   padding: 14px 18px;
-  border-radius: 12px;
   font-size: 13px;
-  box-shadow: 0 5px 25px #0004;
 }
 .warning button {
   margin: 10px 8px 0 0;
@@ -653,18 +684,24 @@
   display: block;
 }
 .debug {
+  composes: panel from "./Hud.module.css";
+  --hud-background: 0 0 0;
+  --hud-radius: 8px;
+  border: 0;
   position: absolute;
   bottom: 95px;
   right: 24px;
-  background: #000b;
   color: #e3ffb0;
   padding: 14px;
   font-size: 11px;
-  border-radius: 8px;
 }
 .summary {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  overflow-y: auto;
   min-height: 100svh;
-  background: radial-gradient(ellipse at 50% 0, #335747 0, transparent 65%);
+  background: linear-gradient(120deg, #152b27a8, #152b27dc);
   display: flex;
   align-items: center;
   flex-direction: column;

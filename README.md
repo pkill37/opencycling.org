@@ -7,7 +7,9 @@ npm install
 npm run dev:https
 ```
 
-Open the local HTTPS URL printed by Next.js. Connect an FTMS/CPS trainer or choose the simulator, then start the Cedar Valley Loop. For simulator-only development, `npm run dev` also works.
+Open the local HTTPS URL printed by Next.js. Connect an FTMS/CPS trainer or choose the simulator, then import a GPX/route package or start the explicitly synthetic training loop. For simulator-only development, `npm run dev` also works.
+
+The geographic route pipeline, local builder command, physics assumptions, and pending curated-route data gates are documented in [Geographic routes](docs/GEOGRAPHIC-ROUTES.md). Alpe d’Huez, Marseille and Paris are not yet validated or published. The original MVP specification below is historical; the geographic-route documentation describes the current implementation.
 
 ```sh
 npm test

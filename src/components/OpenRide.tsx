@@ -7,7 +7,11 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { route } from "@/game/route/route";
+import { route as demoRoute } from "@/game/route/route";
+import { defaultPhysicsConfig } from "@/game/physics/cycling";
+import RouteImport from "./RouteImport";
+import RouteMinimap from "./RouteMinimap";
+import PhysicsSettings from "./PhysicsSettings";
 import { RideEngine } from "@/game/loop/engine";
 import { ZombiesMode, noZombies } from "@/game/modes/zombies";
 import { SimulatorSource } from "@/bluetooth/sources/simulator-source";
@@ -24,10 +28,6 @@ const time = (seconds: number) =>
 const subscribeToHydration = () => () => {};
 const getClientSnapshot = () => true;
 const getServerSnapshot = () => false;
-const profilePoints = route.points.filter((_, i) => i % 16 === 0);
-const profilePath = profilePoints
-  .map((p, i) => `${i ? "L" : "M"}${i * 4},${(60 - (p.y - 1) * 2).toFixed(3)}`)
-  .join(" ");
 const presets = [100, 150, 200, 250, 300, 400, 500, 600, 800];
 type GameMode = "ride" | "zombies";
 export default function OpenRide({
@@ -35,6 +35,20 @@ export default function OpenRide({
 }: {
   initialSetup?: boolean;
 }) {
+  const [route, setRoute] = useState(demoRoute);
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [routeError, setRouteError] = useState("");
+  const [physics, setPhysics] = useState({ ...defaultPhysicsConfig });
+  const low = route.points.reduce((v, p) => Math.min(v, p.y), Infinity);
+  const high = route.points.reduce((v, p) => Math.max(v, p.y), -Infinity);
+  const stride = Math.max(1, Math.floor(route.points.length / 400));
+  const profilePath = route.points
+    .filter((_, i) => i % stride === 0 || i === route.points.length - 1)
+    .map(
+      (p, i) =>
+        `${i ? "L" : "M"}${((p.distanceMeters / route.distanceMeters) * 400).toFixed(2)},${(60 - ((p.y - low) / Math.max(1, high - low)) * 55).toFixed(2)}`,
+    )
+    .join(" ");
   const [activeEngine, setEngine] = useState(() => new RideEngine()),
     [sim] = useState(() => new SimulatorSource()),
     [trainer] = useState(() => new BluetoothTrainerSource());
@@ -112,7 +126,7 @@ export default function OpenRide({
   };
   const start = () => {
     activeEngine.dispose();
-    const next = new RideEngine();
+    const next = new RideEngine(route, { ...physics });
     next.attach(source === "simulator" ? sim : trainer);
     if (source === "simulator") next.ingest(sim.sample());
     setEngine(next);
@@ -140,7 +154,7 @@ export default function OpenRide({
     setSummaryReason("ended");
     setSummary(activeEngine.summary());
     setPhase("summary");
-  }, [activeEngine]);
+  }, [activeEngine, setPhase]);
   const togglePause = useCallback(() => {
     activeEngine.setPaused(!activeEngine.paused);
     setPaused(activeEngine.paused);
@@ -149,6 +163,11 @@ export default function OpenRide({
     world.current?.toggleCamera();
     setCamera(world.current?.cameraName() ?? "Chase");
   }, []);
+  const worldActive = phase !== "home";
+  const showingSummary = useRef(false);
+  useEffect(() => {
+    showingSummary.current = phase === "summary";
+  }, [phase]);
   useEffect(() => {
     const e = activeEngine;
     let frame = 0,
@@ -156,14 +175,19 @@ export default function OpenRide({
       last = performance.now(),
       published = 0;
     let view: typeof world.current = null;
-    if (!host.current || phase !== "ride") return;
+    if (!host.current || !worldActive) return;
     const element = host.current;
     import("@/game/world/scene")
       .then(async ({ createWorld, preloadWorldTextures }) => {
         await preloadWorldTextures();
         if (stopped) return;
         try {
-          view = createWorld(element, e, () => zombiesSnapshot.current);
+          view = createWorld(
+            element,
+            e,
+            () => zombiesSnapshot.current,
+            () => showingSummary.current,
+          );
           world.current = view;
           setWorldLoading(false);
           last = performance.now();
@@ -180,12 +204,12 @@ export default function OpenRide({
           if (stopped) return;
           const dt = Math.min((now - last) / 1000, 0.25);
           last = now;
-          if (!document.hidden) {
+          if (!document.hidden && !showingSummary.current) {
             e.advance(dt);
             zombiesMode.current?.advance(dt, e.state);
           }
           if (!document.hidden) view?.render(dt);
-          if (now - published > 100) {
+          if (now - published > 100 && !showingSummary.current) {
             zombiesSnapshot.current =
               zombiesMode.current?.snapshot ?? noZombies;
             setSnapshot({ ...e.state });
@@ -199,13 +223,14 @@ export default function OpenRide({
               setSummaryReason("caught");
               setSummary(e.summary());
               setPhase("summary");
-              return;
+              showingSummary.current = true;
             }
-            if (phase === "ride" && e.completed) {
+            if (!showingSummary.current && e.completed) {
+              e.setPaused(true);
               setSummaryReason("finished");
               setSummary(e.summary());
               setPhase("summary");
-              return;
+              showingSummary.current = true;
             }
           }
           frame = requestAnimationFrame(tick);
@@ -223,7 +248,7 @@ export default function OpenRide({
       });
     const visibility = () => {
       last = performance.now();
-      if (document.hidden && phase === "ride") {
+      if (document.hidden && !showingSummary.current) {
         e.setPaused(true);
         setPaused(true);
       }
@@ -236,7 +261,7 @@ export default function OpenRide({
       view?.dispose();
       world.current = null;
     };
-  }, [phase, activeEngine]);
+  }, [worldActive, activeEngine]);
   useEffect(() => {
     if (phase !== "ride") return;
     const key = (event: KeyboardEvent) => {
@@ -300,7 +325,7 @@ export default function OpenRide({
     <svg
       viewBox="0 0 400 65"
       role="img"
-      aria-label="Cedar Valley elevation profile"
+      aria-label={`${route.name} elevation profile`}
     >
       <path
         d={`M0,65 ${profilePath.replace(/^M/, "L")} L400,65 Z`}
@@ -308,15 +333,25 @@ export default function OpenRide({
         opacity=".25"
       />
       <path d={profilePath} fill="none" stroke="currentColor" strokeWidth="2" />
+      {phase === "ride" && (
+        <line
+          x1={(snapshot.distanceMeters / route.distanceMeters) * 400}
+          x2={(snapshot.distanceMeters / route.distanceMeters) * 400}
+          y1="0"
+          y2="65"
+          stroke="currentColor"
+          strokeWidth="2"
+        />
+      )}
     </svg>
   );
   return (
     <main className={styles.app}>
-      {phase === "ride" && (
+      {worldActive && (
         <div
           ref={host}
           className={styles.world}
-          aria-label="Cedar Valley 3D cycling world"
+          aria-label={`${route.name} 3D cycling world`}
         />
       )}
       {phase === "ride" && mode === "zombies" && zombies.threat !== "safe" && (
@@ -355,7 +390,7 @@ export default function OpenRide({
               <div className={styles.routeName}>
                 <span className={styles.routeIcon}>↗</span>
                 <div>
-                  <small>EXPLORE THE FIRST ROUTE</small>
+                  <small>REFERENCE-LINE TRAINING</small>
                   <h2>{route.name}</h2>
                 </div>
               </div>
@@ -370,12 +405,26 @@ export default function OpenRide({
                   route.elevationGainMeters.toFixed(0),
                   "m",
                 )}
-                {metric("TERRAIN", "Rolling", "")}
+                {metric("VERSION", route.metadata?.version ?? "—", "")}
               </div>
               <div className={styles.profile}>
                 {profile}
-                <span>ONE LOOP · A QUIET ROAD THROUGH THE PINES</span>
+                <span>{route.metadata?.context}</span>
               </div>
+              <p>{route.metadata?.quality}</p>
+              <details>
+                <summary>Sources & route diagnostics</summary>
+                <p>{route.metadata?.attribution}</p>
+                {route.metadata?.warnings.map((w) => (
+                  <p key={w}>{w}</p>
+                ))}
+                <p>
+                  Direction follows input order.{" "}
+                  {route.loop ? "One closed lap" : "Point to point"}. Gain is
+                  the sum of positive supplied elevation differences; no
+                  smoothing.
+                </p>
+              </details>
             </div>
             <div className={styles.setup}>
               <noscript>
@@ -389,6 +438,62 @@ export default function OpenRide({
                 <span>01 / SETUP</span>
               </div>
               <h2>Choose your ride input</h2>
+              <label>
+                Route{" "}
+                <select
+                  aria-label="Route"
+                  disabled={routeLoading}
+                  value={
+                    route.id === demoRoute.id
+                      ? "demo"
+                      : route.id === "alpe-d-huez-test"
+                        ? "alpe"
+                        : "import"
+                  }
+                  onChange={async (e) => {
+                    setRouteError("");
+                    if (e.target.value === "demo") setRoute(demoRoute);
+                    if (e.target.value === "alpe") {
+                      setRouteLoading(true);
+                      try {
+                        const response = await fetch(
+                          "/routes/alpe-d-huez.json",
+                        );
+                        if (!response.ok)
+                          throw new Error("Could not load Alpe d’Huez.");
+                        const { buildRoute } =
+                          await import("@/game/route/package");
+                        setRoute(buildRoute(await response.json()));
+                      } catch (error) {
+                        setRouteError(
+                          error instanceof Error
+                            ? error.message
+                            : "Route loading failed.",
+                        );
+                      } finally {
+                        setRouteLoading(false);
+                      }
+                    }
+                  }}
+                >
+                  <option value="demo">Synthetic training loop (demo)</option>
+                  {route.id !== demoRoute.id &&
+                    route.id !== "alpe-d-huez-test" && (
+                      <option value="import">{route.name}</option>
+                    )}
+                  <option value="alpe">Alpe d’Huez (GPX test ascent)</option>
+                  <option disabled>
+                    Marseille Corniche — source review pending
+                  </option>
+                  <option disabled>
+                    Paris circuit — edition/source review pending
+                  </option>
+                </select>
+              </label>
+              <RouteImport onSelect={setRoute} />
+              {routeLoading && <p role="status">Loading Alpe d’Huez…</p>}
+              {routeError && <p role="alert">{routeError}</p>}
+              <PhysicsSettings value={physics} onChange={setPhysics} />
               <p>
                 Real watts or a virtual warm-up.
                 <br />
@@ -428,6 +533,7 @@ export default function OpenRide({
               <div className={styles.modeSelect} aria-label="Ride mode">
                 <button
                   className={mode === "ride" ? styles.selected : ""}
+                  aria-pressed={mode === "ride"}
                   onClick={() => setMode("ride")}
                 >
                   <strong>Open Ride</strong>
@@ -435,6 +541,7 @@ export default function OpenRide({
                 </button>
                 <button
                   className={mode === "zombies" ? styles.selected : ""}
+                  aria-pressed={mode === "zombies"}
                   onClick={() => setMode("zombies")}
                 >
                   <strong>Zombies Mode</strong>
@@ -536,6 +643,10 @@ export default function OpenRide({
         <>
           {hud && (
             <div className={styles.rideHud}>
+              <RouteMinimap
+                route={activeEngine.course}
+                distanceMeters={snapshot.distanceMeters}
+              />
               <div className={styles.topbar}>
                 <span className={styles.logo}>◒ openride</span>
                 <span>{route.name}</span>
@@ -578,6 +689,15 @@ export default function OpenRide({
                 </div>
               </div>
               <div className={styles.routeHud}>
+                {profile}
+                <small>
+                  {snapshot.braking ? "AUTO BRAKING" : "CORNER MODEL"} · target{" "}
+                  {((snapshot.targetSpeedMetersPerSecond ?? 30) * 3.6).toFixed(
+                    0,
+                  )}{" "}
+                  km/h · braking loss{" "}
+                  {((snapshot.brakingEnergyJoules ?? 0) / 1000).toFixed(1)} kJ
+                </small>
                 <div>
                   {metric(
                     "DISTANCE",
@@ -713,7 +833,7 @@ export default function OpenRide({
       )}
       {worldLoading && phase === "ride" && (
         <div className={styles.pauseCard} role="status">
-          Loading Cedar Valley…
+          Loading {route.name}…
         </div>
       )}
       {worldError && (

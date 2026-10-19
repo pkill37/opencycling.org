@@ -1,14 +1,14 @@
 import * as T from "three";
-import { route, lookupRoute, terrainHeight } from "../route/route";
+import { lookupRoute } from "../route/route";
+import type { CyclingRoute } from "../../types";
 import type { RideEngine } from "../loop/engine";
 import type { ZombiesSnapshot } from "../modes/zombies";
-import { addScenery, surfaceTexture } from "./scenery";
 import { createRider } from "./rider";
-import { worldTexture } from "./textures";
 
-export { preloadWorldTextures } from "./textures";
+export async function preloadWorldTextures() {}
 
 function ribbon(
+  route: CyclingRoute,
   width: number,
   offset: number,
   lift: number,
@@ -54,8 +54,8 @@ function ribbon(
   return mesh;
 }
 
-function addStartGate(scene: T.Scene) {
-  const start = lookupRoute(0),
+function addStartGate(scene: T.Scene, route: CyclingRoute) {
+  const start = lookupRoute(0, route),
     gate = new T.Group();
   gate.position.set(start.x, start.y, start.z);
   gate.rotation.y = start.heading;
@@ -160,30 +160,13 @@ function createZombie(index: number) {
   return group;
 }
 
-function createGround() {
-  const geometry = new T.PlaneGeometry(2000, 2000, 160, 160);
-  geometry.rotateX(-Math.PI / 2);
-  const vertices = geometry.attributes.position,
-    colors: number[] = [],
-    color = new T.Color();
-  for (let i = 0; i < vertices.count; i++) {
-    const x = vertices.getX(i),
-      z = vertices.getZ(i);
-    vertices.setY(i, terrainHeight(x, z));
-    const variation = Math.sin(x / 37) * Math.cos(z / 29);
-    color.setHSL(0.22 + variation * 0.025, 0.25, 0.46 + variation * 0.055);
-    colors.push(color.r, color.g, color.b);
-  }
-  geometry.setAttribute("color", new T.Float32BufferAttribute(colors, 3));
-  geometry.computeVertexNormals();
-  return geometry;
-}
-
 export function createWorld(
   host: HTMLElement,
   engine: RideEngine,
   getZombies?: () => ZombiesSnapshot,
+  getResting?: () => boolean,
 ) {
+  const route = engine.course;
   const scene = new T.Scene();
   scene.background = new T.Color("#bfd7e5");
   scene.fog = new T.Fog("#bfd7e5", 350, 2200);
@@ -221,36 +204,11 @@ export function createWorld(
   sun.shadow.normalBias = 0.04;
   sun.shadow.bias = -0.0002;
   scene.add(sun, sun.target);
-  const sky = new T.Mesh(
-    new T.SphereGeometry(3000, 24, 16),
-    new T.MeshBasicMaterial({
-      map: worldTexture("sky"),
-      side: T.BackSide,
-      depthWrite: false,
-      toneMapped: false,
-      fog: false,
-    }),
-  );
-  scene.add(sky);
-  const grassMap = surfaceTexture("grass");
-  grassMap.repeat.set(400, 400);
-  const roadMap = surfaceTexture("road"),
-    gravelMap = surfaceTexture("gravel");
-  const ground = new T.Mesh(
-    createGround(),
-    new T.MeshStandardMaterial({
-      map: grassMap,
-      vertexColors: true,
-      roughness: 1,
-    }),
-  );
-  ground.receiveShadow = true;
-  scene.add(ground);
   scene.add(
-    ribbon(8.3, 0, -0.03, 0xd2cabb, gravelMap),
-    ribbon(6.8, 0, 0.02, 0x747777, roadMap),
-    ribbon(0.11, -3.1, 0.035, 0xe4e4c8),
-    ribbon(0.11, 3.1, 0.035, 0xe4e4c8),
+    ribbon(route, 8.3, 0, -0.03, 0xd2cabb),
+    ribbon(route, 6.8, 0, 0.02, 0x747777),
+    ribbon(route, 0.11, -3.1, 0.035, 0xe4e4c8),
+    ribbon(route, 0.11, 3.1, 0.035, 0xe4e4c8),
   );
   const marks = new T.InstancedMesh(
     new T.BoxGeometry(0.1, 0.025, 2.7),
@@ -259,15 +217,14 @@ export function createWorld(
   );
   const marker = new T.Object3D();
   for (let i = 0; i < marks.count; i++) {
-    const p = lookupRoute(i * 9);
+    const p = lookupRoute(i * 9, route);
     marker.position.set(p.x, p.y + 0.04, p.z);
     marker.rotation.set(-Math.atan(p.gradient), p.heading, 0, "YXZ");
     marker.updateMatrix();
     marks.setMatrixAt(i, marker.matrix);
   }
   scene.add(marks);
-  addScenery(scene);
-  addStartGate(scene);
+  addStartGate(scene, route);
   const rider = createRider();
   scene.add(rider.group);
   const zombieMeshes = Array.from({ length: 4 }, (_, index) => {
@@ -378,7 +335,12 @@ export function createWorld(
         }
       }
       const state = engine.state,
-        point = lookupRoute(state.distanceMeters);
+        point = lookupRoute(state.distanceMeters, route);
+      const resting = getResting?.() ?? false;
+      if (resting && cameraMode !== 0) {
+        cameraMode = 0;
+        resetOrbit();
+      }
       rider.group.position.set(point.x, point.y + 0.07, point.z);
       rider.group.rotation.set(
         -Math.atan(point.gradient),
@@ -387,11 +349,12 @@ export function createWorld(
         "YXZ",
       );
       rider.group.visible = cameraMode === 0;
-      const moving = !engine.paused && !engine.completed;
+      const moving = !engine.paused && !engine.completed && !resting;
       rider.update(
         dt,
         moving ? state.cadenceRpm : 0,
-        state.speedMetersPerSecond,
+        moving ? state.speedMetersPerSecond : 0,
+        resting,
       );
       const zombieSnapshot = getZombies?.(),
         visibleZombieCount = zombieSnapshot?.caught
@@ -418,7 +381,7 @@ export function createWorld(
             : [];
       zombieMeshes.forEach((mesh, index) => {
         const zombie = activeZombies[index] ?? activeZombies[0];
-        mesh.visible = index < visibleZombieCount && !!zombie;
+        mesh.visible = !resting && index < visibleZombieCount && !!zombie;
         if (!zombie) return;
         const routeDistance = route.distanceMeters,
           visualGap =
@@ -429,7 +392,10 @@ export function createWorld(
           visualDistance = state.distanceMeters - visualGap,
           wrappedDistance =
             ((visualDistance % routeDistance) + routeDistance) % routeDistance,
-          z = lookupRoute(wrappedDistance);
+          z = lookupRoute(
+            route.loop ? wrappedDistance : Math.max(0, visualDistance),
+            route,
+          );
         const stagger = index % 2 === 0 ? -2.35 : 2.35,
           bob = Math.sin(state.elapsedSeconds * 9 + index) * 0.08;
         mesh.position.set(
@@ -446,7 +412,8 @@ export function createWorld(
         (mesh.userData.rightLeg as T.Mesh).rotation.x = -stride * 0.45;
       });
       const ahead = lookupRoute(
-          (state.distanceMeters + 12) % route.distanceMeters,
+          Math.min(state.distanceMeters + 12, route.distanceMeters),
+          route,
         ),
         target = new T.Vector3(
           point.x,

@@ -1,4 +1,70 @@
 import { test, expect } from "@playwright/test";
+test("GPX validation, preview and selected-course riding", async ({ page }) => {
+  await page.goto("/ride/");
+  await page.getByText("Import GPX or route package", { exact: true }).click();
+  await page.getByLabel("Route file").setInputFiles({
+    name: "test.gpx",
+    mimeType: "application/gpx+xml",
+    buffer: Buffer.from(
+      '<gpx><trk><name>Imported ascent</name><trkseg><trkpt lat="45" lon="6"><ele>700</ele></trkpt><trkpt lat="45.001" lon="6"><ele>710</ele></trkpt><trkpt lat="45.002" lon="6"><ele>720</ele></trkpt></trkseg></trk></gpx>',
+    ),
+  });
+  await page.getByRole("button", { name: "Validate selected segment" }).click();
+  await expect(
+    page.getByText("Imported ascent · 3 samples · unverified"),
+  ).toBeVisible();
+  await expect(page.locator("canvas")).toHaveCount(0);
+  await page.getByRole("button", { name: "Use reviewed preview" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Imported ascent" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Start ride" }).click();
+  await expect(page.locator("canvas")).toBeVisible();
+  await expect(
+    page.getByRole("img", { name: "Imported ascent elevation profile" }),
+  ).toBeVisible();
+  await expect(page.getByText("CORNER MODEL", { exact: false })).toBeVisible();
+  await expect(
+    page.getByRole("img", { name: "Imported ascent route map" }),
+  ).toBeVisible();
+  const rider = page.getByTestId("minimap-rider");
+  const before = await rider.getAttribute("transform");
+  await expect(rider).not.toHaveAttribute("transform", before!);
+  await page.getByRole("button", { name: "Hide HUD" }).click();
+  await expect(page.getByLabel("Route minimap")).toBeHidden();
+});
+test("completed ride retains its live world under the green summary overlay", async ({
+  page,
+}) => {
+  await page.goto("/ride/");
+  await page.getByText("Import GPX or route package", { exact: true }).click();
+  await page.getByLabel("Route file").setInputFiles({
+    name: "finish.gpx",
+    mimeType: "application/gpx+xml",
+    buffer: Buffer.from(
+      '<gpx><trk><name>Finish fixture</name><trkseg><trkpt lat="45" lon="6"><ele>700</ele></trkpt><trkpt lat="45.00005" lon="6"><ele>700</ele></trkpt></trkseg></trk></gpx>',
+    ),
+  });
+  await page.getByRole("button", { name: "Validate selected segment" }).click();
+  await page.getByRole("button", { name: "Use reviewed preview" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Finish fixture" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Start ride" }).click();
+  const canvas = page.locator("canvas");
+  await expect(canvas).toBeVisible();
+  await canvas.evaluate((el) => el.setAttribute("data-original-world", "true"));
+  await expect(page.getByRole("heading", { name: "You made it." })).toBeVisible(
+    { timeout: 15000 },
+  );
+  await expect(canvas).toHaveAttribute("data-original-world", "true");
+  const before = await canvas.screenshot();
+  await expect
+    .poll(async () => Buffer.compare(before, await canvas.screenshot()))
+    .not.toBe(0);
+  await page.getByRole("button", { name: "Back to setup" }).click();
+  await expect(canvas).toHaveCount(0);
+});
 test("simulator ride, controls, pause, summary and restart", async ({
   page,
 }) => {

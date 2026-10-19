@@ -519,9 +519,32 @@ export function createRider() {
       object.receiveShadow = true;
     }
   });
-  let phase = 0;
-  const update = (dt: number, cadence: number, speed: number) => {
-    phase = (phase + (cadence / 60) * Math.PI * 2 * dt) % (Math.PI * 2);
+  let phase = 0,
+    recoveryTime = 0,
+    recovery = 0;
+  const update = (
+    dt: number,
+    cadence: number,
+    speed: number,
+    resting = false,
+  ) => {
+    recoveryTime = resting ? recoveryTime + dt : 0;
+    recovery += ((resting ? 1 : 0) - recovery) * (1 - Math.exp(-dt * 2));
+    // Upper body settles over the bars with heavy breathing that gradually slows.
+    // This presentation clock continues after the authoritative ride has stopped.
+    const breath = Math.sin(
+      recoveryTime * 3.2 + 2 * (1 - Math.exp(-recoveryTime / 8)),
+    );
+    const lean = recovery * (0.055 + breath * 0.012);
+    body.rotation.x = lean;
+    body.rotation.z = recovery * Math.sin(recoveryTime * 1.3) * 0.009;
+    body.position.set(
+      0,
+      1.015 * (1 - Math.cos(lean)) + recovery * breath * 0.004,
+      -1.015 * Math.sin(lean),
+    );
+    // Forward is +Z: the pedal at the top of its stroke moves toward the bars.
+    phase = (phase - (cadence / 60) * Math.PI * 2 * dt) % (Math.PI * 2);
     for (const wheel of wheels)
       wheel.rotation.x =
         (wheel.rotation.x + (speed / 0.34) * dt) % (Math.PI * 2);

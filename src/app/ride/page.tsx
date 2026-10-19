@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import OpenRide from "@/components/OpenRide";
 export const metadata: Metadata = {
-  title: "Ride Cedar Valley",
+  title: "Set up a ride",
   description:
-    "Set up your smart trainer or keyboard simulator and start your Cedar Valley ride.",
+    "Choose a route, review its data and dynamics, and connect your smart trainer or keyboard simulator.",
   robots: { index: false, follow: true },
 };
 
