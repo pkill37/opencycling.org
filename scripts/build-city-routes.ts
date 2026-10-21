@@ -1,6 +1,11 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { parseGpx, packageGpx } from "../src/game/route/gpx";
-import { buildRoute, horizontalDistance } from "../src/game/route/package";
+import { buildRoute } from "../src/game/route/package";
+
+import {
+  removeDuplicateCoordinates,
+  smoothElevations,
+} from "./route-processing";
 
 async function main() {
   for (const city of ["marseille", "paris"] as const) {
@@ -8,30 +13,10 @@ async function main() {
     // Paris: final circuit traversal starting at the earlier passage of the finish.
     const raw =
       city === "paris" ? track.segments[0].slice(6897) : track.segments[0];
-    const samples = raw.filter(
-      (p, i) => !i || horizontalDistance(raw[i - 1], p) >= 0.01,
-    );
+    let samples = removeDuplicateCoordinates(raw);
     const corrections: string[] = [];
     if (city === "paris") {
-      const distances = [0];
-      for (let i = 1; i < samples.length; i++)
-        distances.push(
-          distances[i - 1] + horizontalDistance(samples[i - 1], samples[i]),
-        );
-      const original = samples.map((p) => p.elevation);
-      const at = (d: number) => {
-        let i = 1;
-        while (i < distances.length - 1 && distances[i] < d) i++;
-        const t = (d - distances[i - 1]) / (distances[i] - distances[i - 1]);
-        return original[i - 1] + t * (original[i] - original[i - 1]);
-      };
-      samples.forEach((p, i) => {
-        const d = distances[i],
-          radius = Math.min(50, d, distances.at(-1)! - d);
-        p.elevation = 0;
-        for (let j = -10; j <= 10; j++)
-          p.elevation += at(d + (radius * j) / 10) / 21;
-      });
+      samples = smoothElevations(samples);
       corrections.push(
         "Selected source samples 6898 through end (one-based); removed consecutive duplicate coordinates. Smoothed supplied elevations over a centered 100 m window using 21 samples, narrowed at endpoints. No external elevation evidence.",
       );

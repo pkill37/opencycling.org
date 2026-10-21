@@ -1,3 +1,4 @@
+import { startRide } from "./helpers";
 import { test, expect } from "@playwright/test";
 test("GPX validation, preview and selected-course riding", async ({ page }) => {
   await page.goto("/ride/");
@@ -72,7 +73,7 @@ test("simulator ride, controls, pause, summary and restart", async ({
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "A little power. A world to ride." }),
+    page.getByRole("heading", { name: "Your next ride starts here." }),
   ).toBeVisible();
   await expect(page.locator("canvas")).toHaveCount(0);
   await page.screenshot({
@@ -80,9 +81,7 @@ test("simulator ride, controls, pause, summary and restart", async ({
     fullPage: true,
   });
   await page.getByRole("button", { name: "Use simulator" }).click();
-  await page.getByRole("button", { name: "Start ride" }).click();
-  await expect(page.locator("canvas")).toBeVisible();
-  await expect(page.getByRole("status")).toBeHidden();
+  await startRide(page);
   await expect(
     page.getByText("VIRTUAL TRAINER", { exact: true }),
   ).toBeVisible();
@@ -114,9 +113,7 @@ test("simulator ride, controls, pause, summary and restart", async ({
 test("phone simulator touch controls remain usable", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/ride/");
-  await page.getByRole("button", { name: "Start ride" }).click();
-  await expect(page.locator("canvas")).toBeVisible();
-  await expect(page.getByRole("status")).toBeHidden();
+  await startRide(page);
   await expect(
     page.getByRole("button", { name: "Increase power" }),
   ).toBeVisible();
@@ -221,9 +218,7 @@ test("FTMS browser notifications drive the ride and disconnect offers fallback",
   await page.getByRole("button", { name: "Connect smart trainer" }).click();
   await expect(page.getByText("Mock FTMS Trainer · connected")).toBeVisible();
   await expect(page.getByText("250 W · 90 rpm · 36.0 km/h raw")).toBeVisible();
-  await page.getByRole("button", { name: "Start ride" }).click();
-  await expect(page.locator("canvas")).toBeVisible();
-  await expect(page.getByRole("status")).toBeHidden();
+  await startRide(page);
   await expect(page.getByText("LIVE TRAINER", { exact: true })).toBeVisible();
   await expect(page.locator('[class*="power"] strong')).toHaveText("250W");
   await page.evaluate(() =>

@@ -457,17 +457,7 @@ Do not mix Bluetooth GATT code with physics or Three.js code.
 
 All physical and simulated inputs must be normalized into one shape before entering the simulation.
 
-```ts
-export interface TrainerTelemetrySample {
-  source: 'ftms' | 'cycling-power' | 'heart-rate' | 'simulator';
-  timestampMs: number;
-  powerWatts?: number;
-  cadenceRpm?: number;
-  speedMetersPerSecond?: number;
-  heartRateBpm?: number;
-  raw?: unknown;
-}
-```
+See the canonical [trainer types](src/bluetooth/types.ts).
 
 The simulation must consume normalized telemetry, not raw Bluetooth packets.
 
@@ -500,32 +490,7 @@ The virtual world should be driven by the physics engine using real power, not b
 
 Replace the previous simple `PowerInput` interface with a real trainer-source abstraction.
 
-```ts
-export type TrainerConnectionState =
-  | 'unsupported'
-  | 'idle'
-  | 'requesting-device'
-  | 'connecting'
-  | 'discovering-services'
-  | 'subscribing'
-  | 'connected'
-  | 'disconnected'
-  | 'error';
-
-export interface TrainerSource {
-  readonly id: string;
-  readonly label: string;
-  readonly kind: 'bluetooth-ftms' | 'bluetooth-cps' | 'simulator';
-
-  getState(): TrainerConnectionState;
-  connect(): Promise<void>;
-  disconnect(): Promise<void>;
-
-  subscribe(
-    callback: (sample: TrainerTelemetrySample) => void
-  ): () => void;
-}
-```
+See the canonical [trainer types](src/bluetooth/types.ts).
 
 The ride engine should depend on `TrainerSource`, not on Web Bluetooth directly.
 
@@ -1172,28 +1137,7 @@ Heart rate is out of scope for the first MVP unless trivial.
 
 Use a central telemetry state fed by normalized Bluetooth or simulator input.
 
-```ts
-export interface TrainerTelemetrySample {
-  source: 'ftms' | 'cycling-power' | 'heart-rate' | 'simulator';
-  timestampMs: number;
-  powerWatts?: number;
-  cadenceRpm?: number;
-  speedMetersPerSecond?: number;
-  heartRateBpm?: number;
-  raw?: unknown;
-}
-
-export interface TelemetrySample {
-  timestampMs: number;
-  elapsedSeconds: number;
-  powerWatts: number;
-  cadenceRpm: number;
-  speedMetersPerSecond: number;
-  distanceMeters: number;
-  elevationMeters: number;
-  gradient: number;
-}
-```
+Normalized input uses [TrainerTelemetrySample](src/bluetooth/types.ts); simulation output uses [RiderState](src/types/index.ts).
 
 Telemetry drives:
 
@@ -1431,111 +1375,7 @@ Persistence is optional and should not distract from the ride engine.
 
 Define at minimum:
 
-```ts
-export interface RoutePoint {
-  x: number;
-  y: number;
-  z: number;
-  distanceMeters: number;
-  elevationMeters: number;
-  gradient: number;
-}
-
-export interface CyclingRoute {
-  id: string;
-  name: string;
-  distanceMeters: number;
-  elevationGainMeters: number;
-  loop: boolean;
-  points: RoutePoint[];
-}
-
-export interface PhysicsConfig {
-  riderMassKg: number;
-  bikeMassKg: number;
-  crr: number;
-  cda: number;
-  airDensity: number;
-  drivetrainEfficiency: number;
-  gravity: number;
-  maxDriveForce: number;
-  maxSpeedMetersPerSecond: number;
-}
-
-export interface RiderState {
-  distanceMeters: number;
-  speedMetersPerSecond: number;
-  accelerationMetersPerSecondSq: number;
-  powerWatts: number;
-  cadenceRpm: number;
-  elevationMeters: number;
-  gradient: number;
-  elapsedSeconds: number;
-}
-
-export interface TelemetrySample {
-  timestampMs: number;
-  elapsedSeconds: number;
-  powerWatts: number;
-  cadenceRpm: number;
-  speedMetersPerSecond: number;
-  distanceMeters: number;
-  elevationMeters: number;
-  gradient: number;
-}
-
-export interface RideSummary {
-  routeId: string;
-  distanceMeters: number;
-  elapsedSeconds: number;
-  averageSpeedMetersPerSecond: number;
-  averagePowerWatts: number;
-  maxPowerWatts: number;
-  elevationGainMeters: number;
-}
-
-export interface TrainerTelemetrySample {
-  source: 'ftms' | 'cycling-power' | 'heart-rate' | 'simulator';
-  timestampMs: number;
-  powerWatts?: number;
-  cadenceRpm?: number;
-  speedMetersPerSecond?: number;
-  heartRateBpm?: number;
-  raw?: unknown;
-}
-
-export type TrainerConnectionState =
-  | 'unsupported'
-  | 'idle'
-  | 'requesting-device'
-  | 'connecting'
-  | 'discovering-services'
-  | 'subscribing'
-  | 'connected'
-  | 'disconnected'
-  | 'error';
-
-export interface TrainerSource {
-  readonly id: string;
-  readonly label: string;
-  readonly kind: 'bluetooth-ftms' | 'bluetooth-cps' | 'simulator';
-
-  getState(): TrainerConnectionState;
-  connect(): Promise<void>;
-  disconnect(): Promise<void>;
-
-  subscribe(
-    callback: (sample: TrainerTelemetrySample) => void
-  ): () => void;
-}
-
-export interface SimulatorTrainerSource extends TrainerSource {
-  increasePower(): void;
-  decreasePower(): void;
-  sprint(): void;
-  setPower(powerWatts: number): void;
-}
-```
+Use the canonical [route, physics, rider and summary types](src/types/index.ts) and [trainer types](src/bluetooth/types.ts).
 
 Do not define interfaces for systems that are not part of the MVP.
 

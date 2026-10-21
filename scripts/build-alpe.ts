@@ -1,10 +1,11 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { parseGpx } from "../src/game/route/gpx";
+import { buildRoute, type RoutePackage } from "../src/game/route/package";
+
 import {
-  buildRoute,
-  horizontalDistance,
-  type RoutePackage,
-} from "../src/game/route/package";
+  removeDuplicateCoordinates,
+  smoothElevations,
+} from "./route-processing";
 
 async function main() {
   const [track] = parseGpx(await readFile("public/alpe-d-huez.gpx", "utf8"));
@@ -14,29 +15,7 @@ async function main() {
     (best, p, i) => (p.elevation > raw[best].elevation ? i : best),
     0,
   );
-  const samples = raw
-    .slice(0, finish + 1)
-    .filter((p, i) => !i || horizontalDistance(raw[i - 1], p) >= 0.01);
-  const distances = [0];
-  for (let i = 1; i < samples.length; i++)
-    distances.push(
-      distances[i - 1] + horizontalDistance(samples[i - 1], samples[i]),
-    );
-  const total = distances.at(-1)!;
-  function elevationAt(d: number) {
-    let lo = 0,
-      hi = samples.length - 1;
-    while (lo + 1 < hi) {
-      const mid = (lo + hi) >> 1;
-      if (distances[mid] <= d) lo = mid;
-      else hi = mid;
-    }
-    const t = (d - distances[lo]) / (distances[hi] - distances[lo]);
-    return (
-      samples[lo].elevation +
-      t * (samples[hi].elevation - samples[lo].elevation)
-    );
-  }
+  const samples = removeDuplicateCoordinates(raw.slice(0, finish + 1));
   const pkg: RoutePackage = {
     schemaVersion: 1,
     id: "alpe-d-huez-test",
@@ -71,14 +50,7 @@ async function main() {
         "Test fixture from supplied GPX; elevation smoothing is approximate and geographic accuracy has not been independently reviewed.",
       ],
     },
-    samples: samples.map((p, i) => {
-      const d = distances[i],
-        radius = Math.min(50, d, total - d);
-      let elevation = 0;
-      for (let j = -10; j <= 10; j++)
-        elevation += elevationAt(d + (radius * j) / 10) / 21;
-      return { ...p, elevation };
-    }),
+    samples: smoothElevations(samples),
   };
   const route = buildRoute(pkg);
   await mkdir("public/routes", { recursive: true });

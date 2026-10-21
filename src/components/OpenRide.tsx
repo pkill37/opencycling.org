@@ -10,6 +10,8 @@ import {
 import { route as demoRoute } from "@/game/route/route";
 import { defaultPhysicsConfig } from "@/game/physics/cycling";
 import RouteImport from "./RouteImport";
+import RouteSelection from "./RouteSelection";
+import { bundledRoutes, loadBundledRoute } from "@/game/route/bundled";
 import RouteMinimap from "./RouteMinimap";
 import PhysicsSettings from "./PhysicsSettings";
 import { RideEngine } from "@/game/loop/engine";
@@ -36,8 +38,49 @@ export default function OpenRide({
   initialSetup?: boolean;
 }) {
   const [route, setRoute] = useState(demoRoute);
-  const [routeLoading, setRouteLoading] = useState(false);
+  const [routeLoading, setRouteLoading] = useState(!initialSetup);
+  const [loadingRouteKey, setLoadingRouteKey] = useState("alpe");
   const [routeError, setRouteError] = useState("");
+  const loadRoute = useCallback(async (key: string) => {
+    setRouteError("");
+    if (key === "demo") {
+      setRoute(demoRoute);
+      return;
+    }
+    const course = bundledRoutes.find((entry) => entry.key === key);
+    if (!course) return;
+    setLoadingRouteKey(key);
+    setRouteLoading(true);
+    try {
+      setRoute(await loadBundledRoute(key));
+    } catch (error) {
+      setRouteError(
+        error instanceof Error ? error.message : "Route loading failed.",
+      );
+    } finally {
+      setRouteLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    if (initialSetup) return;
+    let cancelled = false;
+    void loadBundledRoute("alpe")
+      .then((next) => {
+        if (!cancelled) setRoute(next);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled)
+          setRouteError(
+            error instanceof Error ? error.message : "Route loading failed.",
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setRouteLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialSetup]);
   const [physics, setPhysics] = useState({ ...defaultPhysicsConfig });
   const low = route.points.reduce((v, p) => Math.min(v, p.y), Infinity);
   const high = route.points.reduce((v, p) => Math.max(v, p.y), -Infinity);
@@ -309,6 +352,9 @@ export default function OpenRide({
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, [phase, source, sim, togglePause, toggleCamera, finish]);
+  const menuRoute = routeLoading
+    ? bundledRoutes.find((entry) => entry.key === loadingRouteKey)
+    : undefined;
   const sample = trainer.last,
     canStart = source === "simulator" || trainer.state === "connected";
   const metric = (label: string, value: string, unit: string) => (
@@ -367,50 +413,66 @@ export default function OpenRide({
       )}
       {phase === "home" && (
         <>
-          <div className={styles.shade} />
           <header className={styles.header}>
             <Link href="/" prefetch={false} className={styles.logo}>
               <span>◒</span> openride
             </Link>
-            <span className={styles.local}>● NO ACCOUNTS. JUST A RIDE.</span>
+            <span className={styles.local}>
+              FREE TO PLAY · NO ACCOUNT NEEDED
+            </span>
           </header>
           <section className={styles.home}>
             <div className={styles.intro}>
-              <div className={styles.eyebrow}>YOUR ROAD. YOUR RHYTHM.</div>
-              <h1>
-                A little power.
-                <br />A world to ride.
-              </h1>
+              <div className={styles.eyebrow}>PICK A ROAD. MAKE IT YOURS.</div>
+              <h1>Your next ride starts here.</h1>
               <p>
-                Clip in. Find your pace. Take the scenic way home.
-                <br />
-                An open source cycling world, right in your browser.
+                Three French roads. Your power. One open source cycling game.
               </p>
+              <RouteSelection
+                selected={menuRoute?.id ?? route.id}
+                loading={routeLoading}
+                onSelect={(key) => void loadRoute(key)}
+              />
+              <div className={styles.selectionHeading}>
+                <span className={styles.eyebrow}>SELECTED COURSE</span>
+                <span>01 / CHOOSE YOUR ROAD</span>
+              </div>
               <div className={styles.routeName}>
-                <span className={styles.routeIcon}>↗</span>
                 <div>
-                  <small>REFERENCE-LINE TRAINING</small>
-                  <h2>{route.name}</h2>
+                  <small>
+                    {routeLoading
+                      ? "LOADING COURSE…"
+                      : route.id === demoRoute.id
+                        ? "PRACTICE COURSE"
+                        : "GPX PREVIEW"}
+                  </small>
+                  <h2>{menuRoute?.title ?? route.name}</h2>
                 </div>
               </div>
               <div className={styles.routeStats}>
                 {metric(
                   "DISTANCE",
-                  (route.distanceMeters / 1000).toFixed(2),
+                  menuRoute?.distance ??
+                    (route.distanceMeters / 1000).toFixed(2),
                   "km",
                 )}
                 {metric(
                   "ELEVATION GAIN",
-                  route.elevationGainMeters.toFixed(0),
+                  menuRoute?.gain ?? route.elevationGainMeters.toFixed(0),
                   "m",
                 )}
-                {metric("VERSION", route.metadata?.version ?? "—", "")}
               </div>
-              <div className={styles.profile}>
-                {profile}
-                <span>{route.metadata?.context}</span>
-              </div>
-              <p>{route.metadata?.quality}</p>
+              {!routeLoading && (
+                <div className={styles.profile}>
+                  {profile}
+                  <span>{route.metadata?.context}</span>
+                </div>
+              )}
+              <p>
+                {routeLoading
+                  ? "Preparing your course…"
+                  : route.metadata?.quality}
+              </p>
               <details>
                 <summary>Sources & route diagnostics</summary>
                 <p>{route.metadata?.attribution}</p>
@@ -433,10 +495,10 @@ export default function OpenRide({
                 </p>
               </noscript>
               <div className={styles.cardHeading}>
-                <span className={styles.eyebrow}>LET’S GET MOVING</span>
-                <span>01 / SETUP</span>
+                <span className={styles.eyebrow}>READY TO PLAY</span>
+                <span>02 / SETUP</span>
               </div>
-              <h2>Choose your ride input</h2>
+              <h2>Make it your ride.</h2>
               <label>
                 Route{" "}
                 <select
@@ -451,35 +513,7 @@ export default function OpenRide({
                           ? route.id
                           : "import"
                   }
-                  onChange={async (e) => {
-                    setRouteError("");
-                    if (e.target.value === "demo") setRoute(demoRoute);
-                    if (
-                      ["alpe", "marseille", "paris"].includes(e.target.value)
-                    ) {
-                      const slug =
-                        e.target.value === "alpe"
-                          ? "alpe-d-huez"
-                          : e.target.value;
-                      setRouteLoading(true);
-                      try {
-                        const response = await fetch(`/routes/${slug}.json`);
-                        if (!response.ok)
-                          throw new Error("Could not load the selected route.");
-                        const { buildRoute } =
-                          await import("@/game/route/package");
-                        setRoute(buildRoute(await response.json()));
-                      } catch (error) {
-                        setRouteError(
-                          error instanceof Error
-                            ? error.message
-                            : "Route loading failed.",
-                        );
-                      } finally {
-                        setRouteLoading(false);
-                      }
-                    }
-                  }}
+                  onChange={(e) => void loadRoute(e.target.value)}
                 >
                   <option value="demo">Synthetic training loop (demo)</option>
                   {route.id !== demoRoute.id &&
@@ -500,15 +534,11 @@ export default function OpenRide({
                   Download source GPX
                 </a>
               )}
-              <RouteImport onSelect={setRoute} />
+
               {routeLoading && <p role="status">Loading route…</p>}
               {routeError && <p role="alert">{routeError}</p>}
-              <PhysicsSettings value={physics} onChange={setPhysics} />
-              <p>
-                Real watts or a virtual warm-up.
-                <br />
-                The same open road awaits.
-              </p>
+
+              <p>Ride with your trainer or jump in with keyboard controls.</p>
               <button
                 className={`${styles.sourceButton} ${source === "bluetooth" ? styles.selected : ""}`}
                 onClick={() => connect()}
@@ -547,7 +577,7 @@ export default function OpenRide({
                   onClick={() => setMode("ride")}
                 >
                   <strong>Open Ride</strong>
-                  <small>Classic solo loop</small>
+                  <small>Ride at your own pace</small>
                 </button>
                 <button
                   className={mode === "zombies" ? styles.selected : ""}
@@ -558,14 +588,23 @@ export default function OpenRide({
                   <small>Stay ahead of the horde</small>
                 </button>
               </div>
+              <button
+                className={`button ${styles.start}`}
+                disabled={
+                  !canStart || routeLoading || !!routeError || !!worldError
+                }
+                onClick={start}
+              >
+                Start ride <span>→</span>
+              </button>
               <p className={styles.support}>{availability.message}</p>
               {!availability.available && (
-                <div className={styles.connection} aria-live="polite">
-                  <strong>Bluetooth diagnostics</strong>
+                <details className={styles.connection}>
+                  <summary>Bluetooth diagnostics</summary>
                   {availability.details.map((detail) => (
-                    <small key={detail}>{detail}</small>
+                    <p key={detail}>{detail}</p>
                   ))}
-                </div>
+                </details>
               )}
               {setup && source === "bluetooth" && (
                 <div className={styles.connection} aria-live="polite">
@@ -608,6 +647,8 @@ export default function OpenRide({
                   </button>
                 </div>
               )}
+              <RouteImport onSelect={setRoute} />
+              <PhysicsSettings value={physics} onChange={setPhysics} />
               <details className={styles.advanced}>
                 <summary>Connection options & controls</summary>
                 <label>
@@ -632,20 +673,14 @@ export default function OpenRide({
                   diagnostics
                 </p>
               </details>
-              <button
-                className={`button ${styles.start}`}
-                disabled={!canStart || !!worldError}
-                onClick={start}
-              >
-                Start ride <span>→</span>
-              </button>
               <div className={styles.privacy}>
                 LOCAL BY DESIGN · YOUR RIDE STAYS WITH YOU
               </div>
             </div>
           </section>
           <footer className={styles.footer}>
-            <span>BUILT FOR THE SIMPLE JOY OF RIDING.</span>
+            <span>THREE ROADS. NO LEADERBOARD. JUST YOU.</span>
+            <span>OPEN SOURCE · RUNS IN YOUR BROWSER</span>
           </footer>
         </>
       )}

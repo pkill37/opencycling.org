@@ -16,15 +16,12 @@ test("landing content and SEO are present without JavaScript", async ({
     /OpenRide/,
   );
   await expect(page.locator("h1")).toHaveCount(1);
-  await expect(
-    page.getByRole("heading", { name: "Synthetic training loop" }),
-  ).toBeVisible();
+  for (const name of ["Alpe d’Huez", "Marseille", "Paris"]) {
+    await expect(
+      page.getByRole("button", { name: `Select ${name}`, exact: true }),
+    ).toBeVisible();
+  }
   await expect(page.locator("noscript p")).toBeVisible();
-  await expect(
-    page.getByRole("img", {
-      name: "Synthetic training loop elevation profile",
-    }),
-  ).toBeVisible();
   await expect(page.locator("canvas")).toHaveCount(0);
   await page.goto("/ride/");
   await expect(page).toHaveTitle("Set up a ride | OpenRide");
@@ -121,6 +118,19 @@ test("mobile landing page fits without horizontal scrolling", async ({
     ),
   ).toBe(true);
   await expect(page.getByRole("button", { name: "Start ride" })).toBeEnabled();
+  const lastCourse = await page
+    .getByRole("button", { name: "Select Paris", exact: true })
+    .boundingBox();
+  const selectedCourse = await page
+    .getByText("SELECTED COURSE", { exact: true })
+    .boundingBox();
+  expect(lastCourse).not.toBeNull();
+  expect(selectedCourse).not.toBeNull();
+  expect(selectedCourse!.y).toBeGreaterThan(lastCourse!.y + lastCourse!.height);
+  await page.screenshot({
+    path: "test-results/home-phone.png",
+    fullPage: true,
+  });
 });
 
 test("WebGL failure produces an actionable error and a paused ride", async ({
@@ -152,6 +162,7 @@ test("failed scene download clears loading and reports recovery", async ({
 }) => {
   await page.goto("/");
   await expect(page.getByText("Checking Bluetooth support…")).toBeHidden();
+  await expect(page.getByRole("button", { name: "Start ride" })).toBeEnabled();
   await page.route("**/*.js", (route) => route.abort());
   await page.getByRole("button", { name: "Start ride" }).click();
   await expect(page.locator("main").getByRole("alert")).toContainText(
@@ -161,4 +172,30 @@ test("failed scene download clears loading and reports recovery", async ({
   await expect(
     page.getByRole("heading", { name: "Ride paused" }),
   ).toBeVisible();
+});
+
+test("game menu selects bundled courses before starting a ride", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Start ride" })).toBeEnabled();
+  for (const [name, heading] of [
+    ["Marseille", "Marseille Corniche (flat preview)"],
+    ["Paris", "Paris 2023 finale (preview)"],
+    ["Alpe d’Huez", "Alpe d’Huez (test)"],
+  ]) {
+    const card = page.getByRole("button", {
+      name: `Select ${name}`,
+      exact: true,
+    });
+    await card.click();
+    await expect(card).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      page.getByRole("heading", { name: heading, exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Start ride" }),
+    ).toBeEnabled();
+    await expect(page.locator("canvas")).toHaveCount(0);
+  }
 });

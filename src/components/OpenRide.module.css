@@ -77,12 +77,6 @@
     opacity: 1;
   }
 }
-.shade {
-  position: absolute;
-  inset: 0;
-  background: #132b27;
-  z-index: -1;
-}
 .header {
   display: flex;
   justify-content: space-between;
@@ -108,13 +102,13 @@
   color: #d3dfcd;
 }
 .home {
-  width: min(1080px, 92%);
+  width: min(1280px, 92%);
   margin: auto;
   display: grid;
-  grid-template-columns: 1fr 380px;
-  gap: 48px;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 40px;
   padding: 32px 0;
-  align-items: center;
+  align-items: start;
 }
 .eyebrow {
   color: var(--accent);
@@ -123,12 +117,12 @@
   letter-spacing: 2px;
 }
 .intro h1 {
-  font-size: clamp(36px, 4.5vw, 56px);
+  font-size: clamp(32px, 3.5vw, 50px);
   letter-spacing: -2px;
   margin: 12px 0;
 }
 .intro > p {
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.5;
   color: #bfcdc3;
 }
@@ -137,16 +131,6 @@
   align-items: center;
   gap: 16px;
   margin-top: 16px;
-}
-.routeIcon {
-  display: grid;
-  place-items: center;
-  border: 1px solid #b2ce9950;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  color: var(--accent);
-  font-size: 24px;
 }
 .routeName small {
   font-size: 9px;
@@ -724,11 +708,11 @@
 @media (max-width: 1000px) {
   .home {
     gap: 30px;
-    grid-template-columns: 1fr 370px;
+    grid-template-columns: minmax(0, 1fr) 280px;
   }
   .intro h1 {
-    font-size: 52px;
-    letter-spacing: -2.7px;
+    font-size: 38px;
+    letter-spacing: -1.5px;
   }
   .routeStats {
     gap: 22px;
@@ -755,7 +739,7 @@
     font-size: 20px;
   }
 }
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .header {
     padding: 14px 6vw;
   }
@@ -766,7 +750,7 @@
     width: 88%;
   }
   .intro h1 {
-    font-size: 42px;
+    font-size: 36px;
   }
   .intro > p {
     font-size: 14px;
@@ -787,9 +771,6 @@
   }
   .footer > span:last-child {
     display: none;
-  }
-  .shade {
-    background: #132b27;
   }
   .rideHud {
     padding: 12px;
@@ -815,7 +796,7 @@
     padding: 14px 18px;
   }
   .power strong {
-    font-size: 42px;
+    font-size: 36px;
   }
   .primaryMetrics {
     padding: 14px 18px;
@@ -959,4 +940,26 @@
     font-size: 24px;
     margin: 8px 0 16px;
   }
+}
+
+.selectionHeading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.selectionHeading > span:last-child {
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+.intro > details {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.intro > details p {
+  margin-top: 8px;
 }
