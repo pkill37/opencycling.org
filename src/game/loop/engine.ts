@@ -8,7 +8,7 @@ import type {
   TrainerSource,
   TrainerTelemetrySample,
 } from "../../bluetooth/types";
-import { route, lookupRoute } from "../route/route";
+import { lookupRoute } from "../route/route";
 import { stepPhysics, defaultPhysicsConfig } from "../physics/cycling";
 import { brakingEnvelope } from "../physics/cornering";
 export class RideEngine {
@@ -36,7 +36,7 @@ export class RideEngine {
   private accumulator = 0;
   private speedLimits: number[];
   constructor(
-    public course: CyclingRoute = route,
+    public course: CyclingRoute,
     public config: PhysicsConfig = { ...defaultPhysicsConfig },
   ) {
     this.speedLimits = brakingEnvelope(course, config);

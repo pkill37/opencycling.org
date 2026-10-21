@@ -1,5 +1,14 @@
 import { test, expect } from "@playwright/test";
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "bluetooth", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+});
+
 test("landing content and SEO are present without JavaScript", async ({
   browser,
 }) => {
@@ -122,7 +131,7 @@ test("mobile landing page fits without horizontal scrolling", async ({
     .getByRole("button", { name: "Select Paris", exact: true })
     .boundingBox();
   const selectedCourse = await page
-    .getByText("SELECTED COURSE", { exact: true })
+    .getByText("READY TO PLAY", { exact: true })
     .boundingBox();
   expect(lastCourse).not.toBeNull();
   expect(selectedCourse).not.toBeNull();
@@ -179,20 +188,13 @@ test("game menu selects bundled courses before starting a ride", async ({
 }) => {
   await page.goto("/");
   await expect(page.getByRole("button", { name: "Start ride" })).toBeEnabled();
-  for (const [name, heading] of [
-    ["Marseille", "Marseille Corniche (flat preview)"],
-    ["Paris", "Paris 2023 finale (preview)"],
-    ["Alpe d’Huez", "Alpe d’Huez (test)"],
-  ]) {
+  for (const name of ["Marseille", "Paris", "Alpe d’Huez"]) {
     const card = page.getByRole("button", {
       name: `Select ${name}`,
       exact: true,
     });
     await card.click();
     await expect(card).toHaveAttribute("aria-pressed", "true");
-    await expect(
-      page.getByRole("heading", { name: heading, exact: true }),
-    ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Start ride" }),
     ).toBeEnabled();

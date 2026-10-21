@@ -1,8 +1,8 @@
 .map {
   composes: panel from "./Hud.module.css";
   position: absolute;
-  left: max(24px, env(safe-area-inset-left));
-  bottom: calc(90px + env(safe-area-inset-bottom));
+  right: max(24px, env(safe-area-inset-right));
+  top: max(24px, env(safe-area-inset-top));
   width: 240px;
   padding: 12px;
   pointer-events: none;
@@ -21,15 +21,15 @@
 }
 @media (max-width: 760px) {
   .map {
-    left: max(12px, env(safe-area-inset-left));
-    bottom: calc(152px + env(safe-area-inset-bottom));
+    right: max(12px, env(safe-area-inset-right));
+    top: max(12px, env(safe-area-inset-top));
     width: 150px;
     padding: 8px;
   }
 }
 @media (max-height: 540px) and (orientation: landscape) {
   .map {
-    bottom: calc(64px + env(safe-area-inset-bottom));
+    top: max(8px, env(safe-area-inset-top));
     width: 110px;
     padding: 6px;
   }

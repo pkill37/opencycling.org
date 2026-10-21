@@ -11,9 +11,9 @@ local GPX builder, browser GPX/package selection and preview, exact road-profile
 lookup, configurable longitudinal dynamics, anticipatory automatic braking, and a
 minimal road renderer consuming the engine's selected course.
 
-**The three curated routes are not published.** No licensed source recordings or
-independent reference measurements were supplied with the PRD. The synthetic loop
-is explicitly a runtime fixture, not Alpe d'Huez. Imported packages are unverified;
+**The three bundled routes are unverified previews.** Independent reference
+measurements are still needed before geographic accuracy can be confirmed.
+Imported packages are also unverified;
 the schema deliberately cannot assert curated validation. This is an implementation
 foundation, not completion of the PRD's geographic accuracy acceptance gates.
 

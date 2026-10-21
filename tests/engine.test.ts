@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { stepPhysics, defaultPhysicsConfig } from "../src/game/physics/cycling";
-import { route, lookupRoute } from "../src/game/route/route";
+import { lookupRoute } from "../src/game/route/route";
+import { route } from "./fixtures/loop-route";
 import { RideEngine } from "../src/game/loop/engine";
 import { SimulatorSource } from "../src/bluetooth/sources/simulator-source";
 import type { TrainerSource } from "../src/bluetooth/types";
@@ -32,22 +33,22 @@ test("physics responds to power, slope, mass and coasting", () => {
 });
 test("route lookup is bounded, continuous and reaches the closed loop finish", () => {
   for (let d = 0; d < route.distanceMeters; d += 7) {
-    const p = lookupRoute(d);
+    const p = lookupRoute(d, route);
     assert.ok(Number.isFinite(p.x + p.y + p.z + p.gradient + p.heading));
     assert.ok(Math.abs(p.gradient) < 0.2);
     assert.equal(p.y, p.elevationMeters);
   }
-  const a = lookupRoute(0),
-    b = lookupRoute(route.distanceMeters);
+  const a = lookupRoute(0, route),
+    b = lookupRoute(route.distanceMeters, route);
   assert.ok(Math.hypot(a.x - b.x, a.z - b.z) < 0.01);
   assert.equal(b.progress, 1);
   assert.equal(b.remainingDistanceMeters, 0);
-  assert.equal(lookupRoute(-10).progress, 0);
-  assert.equal(lookupRoute(Infinity).progress, 1);
+  assert.equal(lookupRoute(-10, route).progress, 0);
+  assert.equal(lookupRoute(Infinity, route).progress, 1);
 });
 test("fixed-step simulation is independent of frame frequency", () => {
-  const a = new RideEngine(),
-    b = new RideEngine(),
+  const a = new RideEngine(route),
+    b = new RideEngine(route),
     sim = new SimulatorSource();
   for (const e of [a, b]) {
     e.attach(sim, 0);
@@ -59,7 +60,7 @@ test("fixed-step simulation is independent of frame frequency", () => {
   assert.ok(a.state.distanceMeters > 0);
 });
 test("pause stops elapsed time and distance; resume continues", () => {
-  const e = new RideEngine();
+  const e = new RideEngine(route);
   e.step(1, 200, 80);
   const before = { ...e.state };
   e.paused = true;
@@ -70,7 +71,7 @@ test("pause stops elapsed time and distance; resume continues", () => {
   assert.ok(e.state.distanceMeters > before.distanceMeters);
 });
 test("lap completion clamps distance, stops rider and produces a weighted summary", () => {
-  const e = new RideEngine();
+  const e = new RideEngine(route);
   for (let i = 0; i < 200000 && !e.completed; i++) e.step(1 / 60, 400, 90);
   assert.ok(e.completed);
   assert.equal(e.state.distanceMeters, route.distanceMeters);
@@ -83,7 +84,7 @@ test("lap completion clamps distance, stops rider and produces a weighted summar
   assert.deepEqual(e.state, before);
 });
 test("trainer power takes priority; stale power decays and pauses despite fresh cadence", () => {
-  const e = new RideEngine();
+  const e = new RideEngine(route);
   e.attach(fake, 0);
   e.ingest({ source: "ftms", timestampMs: 0, powerWatts: 250 });
   e.ingest({ source: "cycling-power", timestampMs: 0, powerWatts: 200 });
@@ -96,7 +97,7 @@ test("trainer power takes priority; stale power decays and pauses despite fresh 
   assert.match(e.warning, /lost/);
 });
 test("fresh CPS power fills absent or stale FTMS power", () => {
-  const e = new RideEngine();
+  const e = new RideEngine(route);
   e.attach(fake, 0);
   e.ingest({ source: "ftms", timestampMs: 0, powerWatts: 250 });
   e.ingest({ source: "cycling-power", timestampMs: 4000, powerWatts: 190 });
@@ -104,7 +105,7 @@ test("fresh CPS power fills absent or stale FTMS power", () => {
   assert.equal(e.warning, "");
 });
 test("absent trainer power pauses after timeout; simulator fallback clears warning", () => {
-  const e = new RideEngine();
+  const e = new RideEngine(route);
   e.attach(fake, 0);
   e.input(11001);
   assert.ok(e.paused);
@@ -143,7 +144,7 @@ test("switching sources and disposing unsubscribe exactly once", () => {
       };
     },
   };
-  const engine = new RideEngine();
+  const engine = new RideEngine(route);
   engine.attach(source, 0);
   engine.ingest({ source: "ftms", timestampMs: 0, powerWatts: 300 });
   engine.attach(source, 100);
@@ -156,7 +157,7 @@ test("switching sources and disposing unsubscribe exactly once", () => {
 });
 
 test("invalid telemetry does not replace or refresh the last valid power", () => {
-  const engine = new RideEngine();
+  const engine = new RideEngine(route);
   engine.attach(fake, 0);
   engine.ingest({ source: "ftms", timestampMs: 0, powerWatts: 250 });
   for (const powerWatts of [NaN, Infinity, -Infinity]) {
@@ -170,7 +171,7 @@ test("invalid telemetry does not replace or refresh the last valid power", () =>
 });
 
 test("pause clears fractional frame time before resuming", () => {
-  const engine = new RideEngine();
+  const engine = new RideEngine(route);
   const sim = new SimulatorSource();
   engine.attach(sim, 0);
   engine.ingest(sim.sample(0));

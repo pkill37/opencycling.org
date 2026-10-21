@@ -17,10 +17,13 @@
     border-color 0.15s,
     background 0.15s;
 }
-.course:hover:not(:disabled),
-.course[aria-pressed="true"] {
+.course:hover:not(:disabled) {
   border-color: var(--course-color);
   background: #ffffff07;
+}
+.course[aria-pressed="true"] {
+  background: #10231f;
+  filter: invert(1);
 }
 .course:disabled {
   opacity: 0.7;

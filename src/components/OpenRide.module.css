@@ -105,7 +105,7 @@
   width: min(1280px, 92%);
   margin: auto;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 40px;
   padding: 32px 0;
   align-items: start;
@@ -125,26 +125,6 @@
   font-size: 14px;
   line-height: 1.5;
   color: #bfcdc3;
-}
-.routeName {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-top: 16px;
-}
-.routeName small {
-  font-size: 9px;
-  letter-spacing: 1.5px;
-  color: var(--muted);
-}
-.routeName h2 {
-  font-size: 22px;
-  margin-top: 4px;
-}
-.routeStats {
-  display: flex;
-  gap: 28px;
-  margin: 18px 0;
 }
 .metric {
   font-variant-numeric: tabular-nums;
@@ -167,25 +147,13 @@
   margin-left: 5px;
   color: #b5c4b8;
 }
-.profile {
-  max-width: 440px;
-  color: var(--accent);
-  border-bottom: 1px solid #b9d29240;
-}
-.profile > span {
-  display: block;
-  color: var(--muted);
-  font-size: 8px;
-  letter-spacing: 1.7px;
-  padding: 12px 0;
-}
 .setup {
   min-width: 0;
   background: transparent;
   border: 0;
-  border-left: 1px solid var(--line);
+  border-top: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 16px;
+  padding: 16px 0 0;
 }
 .setup > label,
 .setup details label {
@@ -204,53 +172,87 @@
   border-radius: 4px;
   padding: 6px;
 }
-.setup > details {
+.setup details {
   margin: 12px 0;
   font-size: 13px;
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
-.setup > details button {
+.setup details button {
   border: 1px solid var(--line);
   padding: 8px;
   margin: 4px;
 }
-.cardHeading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.setup > .debugSettings {
+  margin: 16px 0 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 14px;
+  background: #ffffff03;
+  font-size: 12px;
 }
-.cardHeading > span:last-child {
-  font-size: 9px;
+.debugSettings > summary {
+  padding: 12px 0;
+  cursor: pointer;
   color: var(--muted);
-  letter-spacing: 1px;
+}
+.debugSettings[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+.debugGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 24px;
+  padding: 4px 0;
+}
+.debugGrid > details {
+  min-width: 0;
+  margin: 8px 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 12px;
+}
+.debugGrid summary {
+  cursor: pointer;
 }
 .setup h2 {
-  font-size: 21px;
-  margin-top: 16px;
-  margin-bottom: 12px;
-  letter-spacing: -0.7px;
+  margin: 0 0 12px;
+  font-size: 10px;
+}
+.setupControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 150px;
+  align-items: stretch;
+  gap: 16px;
+}
+.setupControls .start {
+  min-height: 44px !important;
+  margin: 0;
+  font-size: 12px;
 }
 .setup > p {
   font-size: 13px;
   line-height: 1.5;
   margin-bottom: 12px;
 }
+.sourceSelect {
+  display: flex;
+}
 .sourceButton {
   width: 100%;
   display: flex;
   align-items: center;
   text-align: left;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 6px;
+  padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 4px;
   background: #ffffff03;
-  margin-top: 8px;
-  min-height: 52px;
+  min-height: 44px;
 }
 .sourceButton > span:first-child {
-  font-size: 26px;
+  font-size: 20px;
   color: #c6d5b8;
 }
 .sourceButton > span:last-child {
@@ -261,7 +263,7 @@
   display: block;
 }
 .sourceButton strong {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
 }
 .sourceButton small {
@@ -279,9 +281,8 @@
 }
 .modeSelect {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-top: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
 }
 .modeSelect button {
   text-align: left;
@@ -305,7 +306,7 @@
 .setup > .support {
   min-height: 0;
   font-size: 10px;
-  margin: 12px 0;
+  margin: 8px 0;
   color: #99aca0;
 }
 .advanced {
@@ -346,15 +347,6 @@
   letter-spacing: 1.35px;
   color: var(--muted);
   margin-top: 17px;
-}
-.footer {
-  padding: 14px 4.5vw;
-  display: flex;
-  justify-content: space-between;
-  border-top: 1px solid var(--line);
-  font-size: 8px;
-  letter-spacing: 1.5px;
-  color: #aebfb1;
 }
 .connection {
   display: flex;
@@ -427,7 +419,7 @@
   gap: 8px;
   position: absolute;
   left: 24px;
-  top: 110px;
+  top: max(24px, env(safe-area-inset-top));
   width: 190px;
 }
 .power {
@@ -441,7 +433,7 @@
   letter-spacing: 2px;
   color: var(--muted);
 }
-.power > span:last-child {
+.power > span:nth-of-type(2) {
   font-size: 8px;
 }
 .power strong {
@@ -456,6 +448,31 @@
   font-size: 22px;
   letter-spacing: 0;
   margin-left: 8px;
+}
+.powerControls {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  gap: 2px;
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.powerControls button {
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: #ffffff0a;
+  font-size: 11px;
+  touch-action: manipulation;
+}
+.powerControls button:first-child,
+.powerControls button:last-child {
+  color: var(--accent);
+  font-size: 24px;
+}
+.powerControls button:hover {
+  background: #ffffff17;
 }
 .primaryMetrics {
   composes: panel from "./Hud.module.css";
@@ -476,8 +493,8 @@
 .routeHud {
   composes: panel from "./Hud.module.css";
   position: absolute;
-  right: 24px;
-  top: 110px;
+  left: max(24px, env(safe-area-inset-left));
+  bottom: max(24px, env(safe-area-inset-bottom));
   width: 290px;
   padding: 14px;
 }
@@ -518,7 +535,7 @@
   --hud-border: #a8ff7a55;
   position: absolute;
   right: 24px;
-  top: 330px;
+  top: calc(244px + env(safe-area-inset-top));
   width: 190px;
   padding: 12px 16px;
   font-variant-numeric: tabular-nums;
@@ -572,7 +589,7 @@
   left: 24px;
   right: 24px;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   align-items: center;
 }
@@ -597,17 +614,6 @@
 }
 .controlGroup button:hover {
   background: #ffffff17;
-}
-.controlGroup:first-child button:first-child,
-.controlGroup:first-child button:nth-child(3) {
-  font-size: 24px;
-  color: var(--accent);
-}
-.controlGroup > span {
-  min-width: 62px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  font-size: 13px;
 }
 .pauseCard {
   composes: panel from "./Hud.module.css";
@@ -706,19 +712,23 @@
   }
 }
 @media (max-width: 1000px) {
+  .setupControls {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+  }
+  .setupControls .start {
+    grid-column: 1 / -1;
+  }
+
   .home {
     gap: 30px;
-    grid-template-columns: minmax(0, 1fr) 280px;
   }
   .intro h1 {
     font-size: 38px;
     letter-spacing: -1.5px;
   }
-  .routeStats {
-    gap: 22px;
-  }
   .setup {
-    padding: 16px;
+    padding: 16px 0 0;
   }
   .local {
     display: none;
@@ -728,7 +738,7 @@
   }
   .zombieHud {
     right: 12px;
-    top: 360px;
+    top: calc(274px + env(safe-area-inset-top));
     width: 150px;
     padding: 14px;
   }
@@ -740,6 +750,13 @@
   }
 }
 @media (max-width: 900px) {
+  .debugGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .setupControls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .header {
     padding: 14px 6vw;
   }
@@ -755,22 +772,10 @@
   .intro > p {
     font-size: 14px;
   }
-  .routeName {
-    margin-top: 30px;
-  }
-  .routeStats {
-    justify-content: space-between;
-  }
-  .profile {
-    display: none;
-  }
   .setup {
     padding: 16px 0 0;
     border-left: 0;
     border-top: 1px solid var(--line);
-  }
-  .footer > span:last-child {
-    display: none;
   }
   .rideHud {
     padding: 12px;
@@ -789,7 +794,7 @@
   }
   .telemetry {
     left: 12px;
-    top: 80px;
+    top: max(12px, env(safe-area-inset-top));
     width: 160px;
   }
   .power {
@@ -815,9 +820,9 @@
     font-size: 10px;
   }
   .routeHud {
-    right: 12px;
-    top: 80px;
-    width: 150px;
+    left: max(12px, env(safe-area-inset-left));
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    width: min(290px, calc(100vw - 24px));
     padding: 14px;
   }
   .zombieHud {
@@ -831,8 +836,7 @@
     font-size: 34px;
   }
   .routeHud > div {
-    flex-direction: column;
-    gap: 16px;
+    gap: 12px;
   }
   .routeHud > small {
     flex-direction: column;
@@ -887,7 +891,7 @@
     font-size: 19px;
   }
   .telemetry {
-    top: 60px;
+    top: max(8px, env(safe-area-inset-top));
     left: 12px;
     width: 175px;
     gap: 5px;
@@ -910,7 +914,7 @@
     font-size: 19px;
   }
   .routeHud {
-    top: 60px;
+    bottom: calc(64px + env(safe-area-inset-bottom));
     width: 190px;
     padding: 12px;
   }
@@ -940,26 +944,4 @@
     font-size: 24px;
     margin: 8px 0 16px;
   }
-}
-
-.selectionHeading {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
-}
-.selectionHeading > span:last-child {
-  font-size: 9px;
-  color: var(--muted);
-  letter-spacing: 1px;
-}
-.intro > details {
-  margin-top: 12px;
-  font-size: 12px;
-  color: var(--muted);
-  overflow-wrap: anywhere;
-}
-.intro > details p {
-  margin-top: 8px;
 }

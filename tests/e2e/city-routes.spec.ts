@@ -2,17 +2,28 @@ import { test, expect } from "@playwright/test";
 
 import { startRide } from "./helpers";
 
-for (const [city, name] of [
-  ["alpe", "Alpe d’Huez (test)"],
-  ["marseille", "Marseille Corniche (flat preview)"],
-  ["paris", "Paris 2023 finale (preview)"],
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "bluetooth", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+});
+
+for (const [city, title, name] of [
+  ["alpe", "Alpe d’Huez", "Alpe d’Huez (test)"],
+  ["marseille", "Marseille", "Marseille Corniche (flat preview)"],
+  ["paris", "Paris", "Paris 2023 finale (preview)"],
 ]) {
   test(`${city} GPX preview loads and starts`, async ({ page }) => {
     await page.goto("/ride/");
-    await page.getByLabel("Route", { exact: true }).selectOption(city);
+    await page
+      .getByRole("button", { name: `Select ${title}`, exact: true })
+      .click();
     await expect(
-      page.getByRole("heading", { name, exact: true }),
-    ).toBeVisible();
+      page.getByRole("button", { name: `Select ${title}`, exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
     if (city !== "alpe")
       await expect(
         page.getByRole("link", { name: "Download source GPX" }),

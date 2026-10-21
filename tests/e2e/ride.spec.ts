@@ -1,7 +1,18 @@
 import { startRide } from "./helpers";
 import { test, expect } from "@playwright/test";
+test.beforeEach(async ({ page }, testInfo) => {
+  if (testInfo.title.startsWith("FTMS browser")) return;
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "bluetooth", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+});
+
 test("GPX validation, preview and selected-course riding", async ({ page }) => {
   await page.goto("/ride/");
+  await page.getByText("Debug settings", { exact: true }).click();
   await page.getByText("Import GPX or route package", { exact: true }).click();
   await page.getByLabel("Route file").setInputFiles({
     name: "test.gpx",
@@ -16,9 +27,7 @@ test("GPX validation, preview and selected-course riding", async ({ page }) => {
   ).toBeVisible();
   await expect(page.locator("canvas")).toHaveCount(0);
   await page.getByRole("button", { name: "Use reviewed preview" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Imported ascent" }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start ride" })).toBeEnabled();
   await page.getByRole("button", { name: "Start ride" }).click();
   await expect(page.locator("canvas")).toBeVisible();
   await expect(
@@ -38,6 +47,7 @@ test("completed ride retains its live world under the green summary overlay", as
   page,
 }) => {
   await page.goto("/ride/");
+  await page.getByText("Debug settings", { exact: true }).click();
   await page.getByText("Import GPX or route package", { exact: true }).click();
   await page.getByLabel("Route file").setInputFiles({
     name: "finish.gpx",
@@ -48,9 +58,7 @@ test("completed ride retains its live world under the green summary overlay", as
   });
   await page.getByRole("button", { name: "Validate selected segment" }).click();
   await page.getByRole("button", { name: "Use reviewed preview" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Finish fixture" }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start ride" })).toBeEnabled();
   await page.getByRole("button", { name: "Start ride" }).click();
   const canvas = page.locator("canvas");
   await expect(canvas).toBeVisible();
@@ -80,16 +88,19 @@ test("simulator ride, controls, pause, summary and restart", async ({
     path: "test-results/home-desktop.png",
     fullPage: true,
   });
-  await page.getByRole("button", { name: "Use simulator" }).click();
   await startRide(page);
   await expect(
     page.getByText("VIRTUAL TRAINER", { exact: true }),
   ).toBeVisible();
   await page.locator("main").click({ position: { x: 400, y: 300 } });
   await page.keyboard.press("5");
-  await expect(page.getByText("300 W", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("group", { name: "Power", exact: true }).locator("strong"),
+  ).toHaveText(/300\s*W/);
   await page.getByRole("button", { name: "Increase power" }).click();
-  await expect(page.getByText("325 W", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("group", { name: "Power", exact: true }).locator("strong"),
+  ).toHaveText(/325\s*W/);
   await page.screenshot({ path: "test-results/ride-desktop.png" });
   await page.getByRole("button", { name: "Change camera" }).click();
   await expect(page.getByText("First person", { exact: true })).toBeVisible();
@@ -118,7 +129,13 @@ test("phone simulator touch controls remain usable", async ({ page }) => {
     page.getByRole("button", { name: "Increase power" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Increase power" }).click();
-  await expect(page.getByText("175 W", { exact: true })).toBeVisible();
+  const power = page.getByRole("group", { name: "Power", exact: true });
+  await expect(power.locator("strong")).toHaveText(/175\s*W/);
+  await expect(
+    power.getByRole("button", { name: "Increase power" }),
+  ).toBeVisible();
+  const powerBounds = await power.boundingBox();
+  expect(powerBounds!.y).toBeLessThan(100);
   await page.screenshot({ path: "test-results/ride-phone.png" });
   await page.getByRole("button", { name: "Sprint", exact: true }).click();
   await page.getByRole("button", { name: "Finish", exact: true }).click();
@@ -163,7 +180,7 @@ test("mouse orbit and wheel zoom control the ride camera", async ({ page }) => {
   expect(Buffer.compare(afterZoom, afterOrbit)).not.toBe(0);
 });
 
-test("FTMS browser notifications drive the ride and disconnect offers fallback", async ({
+test("FTMS browser notifications drive the ride and disconnect offers reconnect", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -215,7 +232,13 @@ test("FTMS browser notifications drive the ride and disconnect offers fallback",
     });
   });
   await page.goto("/");
+  await expect(page.getByRole("button", { name: "Start ride" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Use simulator" })).toHaveCount(
+    0,
+  );
   await page.getByRole("button", { name: "Connect smart trainer" }).click();
+  await expect(page.getByText("Mock FTMS Trainer · connected")).toBeHidden();
+  await page.getByText("Debug settings", { exact: true }).click();
   await expect(page.getByText("Mock FTMS Trainer · connected")).toBeVisible();
   await expect(page.getByText("250 W · 90 rpm · 36.0 km/h raw")).toBeVisible();
   await startRide(page);
@@ -230,10 +253,13 @@ test("FTMS browser notifications drive the ride and disconnect offers fallback",
   await expect(page.getByRole("heading", { name: "Ride paused" })).toBeVisible({
     timeout: 12000,
   });
-  await page.getByRole("button", { name: "Use simulator" }).click();
-  await page.getByRole("button", { name: "Resume ride" }).click();
   await expect(
-    page.getByText("VIRTUAL TRAINER", { exact: true }),
+    page.getByRole("button", { name: "Reconnect", exact: true }),
   ).toBeVisible();
-  await expect(page.locator("main").getByRole("alert")).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: "Increase power" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Use simulator" })).toHaveCount(
+    0,
+  );
 });
