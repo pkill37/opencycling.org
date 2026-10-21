@@ -5,19 +5,15 @@ import type { RideEngine } from "../loop/engine";
 import type { ZombiesSnapshot } from "../modes/zombies";
 import { createRider } from "./rider";
 
-export async function preloadWorldTextures() {}
-
 function ribbon(
   route: CyclingRoute,
   width: number,
   offset: number,
   lift: number,
   color: number,
-  map?: T.Texture,
 ) {
   const positions: number[] = [],
-    indices: number[] = [],
-    uvs: number[] = [];
+    indices: number[] = [];
   route.points.forEach((p, i) => {
     const a = route.points[Math.max(0, i - 1)],
       b = route.points[Math.min(route.points.length - 1, i + 1)];
@@ -29,7 +25,6 @@ function ribbon(
         p.y + lift,
         p.z - Math.sin(heading) * lateral,
       );
-      uvs.push(((side + 1) * width) / 4, p.distanceMeters / 2);
     }
     if (i) {
       const n = i * 2;
@@ -38,14 +33,12 @@ function ribbon(
   });
   const geometry = new T.BufferGeometry();
   geometry.setAttribute("position", new T.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute("uv", new T.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   const mesh = new T.Mesh(
     geometry,
     new T.MeshStandardMaterial({
       color,
-      map: map ?? null,
       roughness: 1,
       side: T.DoubleSide,
     }),

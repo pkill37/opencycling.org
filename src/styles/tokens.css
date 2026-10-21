@@ -1,11 +1,9 @@
 :root {
   --ink: #eef0e7;
   --muted: #a5b4ad;
-  --surface: #182c29;
   --accent: #d9f77e;
   --line: #ffffff20;
-  --radius: 18px;
-  --space: clamp(16px, 2.5vw, 36px);
+  --radius: 4px;
   --font: Arial, Helvetica, sans-serif;
   color-scheme: dark;
 }

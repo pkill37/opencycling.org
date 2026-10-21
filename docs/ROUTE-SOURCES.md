@@ -86,8 +86,24 @@ The checked pages offer public downloads, but no explicit open redistribution
 license for these track files was established. Record the source attribution and
 obtain applicable reuse terms before committing originals or derived packages to
 public static assets. Public download availability is not redistribution permission.
-Original files were inspected in memory, not added to the repository.
+At the initial inventory, original files were inspected in memory only. See the
+bundled preview update below for the current files and processing.
 
 Recommended next sequence: resolve reuse terms, extract the intended courses,
 audit alignment/structures, source corrected road elevations, then define and
 measure independent accuracy tolerances. See [pipeline documentation](GEOGRAPHIC-ROUTES.md).
+
+## Bundled city previews (2026-10-21)
+
+The requested downloads are now stored as `public/marseille.gpx` and
+`public/paris.gpx`, with original source URLs in the derived packages.
+Reuse terms remain unconfirmed; bundling does not establish an open license.
+
+Run `npm run route:cities` to regenerate both runtime packages. Marseille uses
+the complete 74-point tourism itinerary (4.522 km), explicitly flattened because
+elevation is missing. Paris uses source samples 6898 through the end, removing
+consecutive duplicate coordinates: a 6.713 km final circuit traversal with
+approximately 27 m of gain after documented 100 m elevation smoothing. The
+endpoints remain open; no closing segment or repeat-lap behavior is invented.
+Neither route has independent alignment or elevation validation. Both appear
+in the setup selector with preview labels and links to download the original GPX.

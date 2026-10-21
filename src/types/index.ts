@@ -55,12 +55,6 @@ export interface RiderState {
   brakingEnergyJoules?: number;
   targetSpeedMetersPerSecond?: number;
 }
-export interface TelemetrySample extends Omit<
-  RiderState,
-  "accelerationMetersPerSecondSq"
-> {
-  timestampMs: number;
-}
 export interface RideSummary {
   routeId: string;
   distanceMeters: number;

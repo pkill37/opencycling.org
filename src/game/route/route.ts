@@ -43,7 +43,7 @@ export const route: CyclingRoute = {
     context: "Synthetic fixture, not a real course. One lap.",
     quality: "Synthetic — geographic accuracy not applicable",
     warnings: [
-      "Curated Alpe d’Huez, Marseille and Paris packages await source and reference review.",
+      "Bundled GPX routes are unverified previews; geographic accuracy awaits independent review.",
     ],
     attribution: "OpenRide procedural fixture",
   },

@@ -3,9 +3,7 @@
   min-height: 100svh;
   isolation: isolate;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 18% 20%, #375748 0, transparent 34%),
-    radial-gradient(circle at 78% 70%, #243f38 0, transparent 38%), #10231f;
+  background: #10231f;
 }
 .world {
   position: absolute;
@@ -82,19 +80,14 @@
 .shade {
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    90deg,
-    #132b27f5 0%,
-    #142c27c7 42%,
-    #142b2765 100%
-  );
+  background: #132b27;
   z-index: -1;
 }
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 32px 4.5vw;
+  padding: 16px 4.5vw;
   border-bottom: 1px solid var(--line);
 }
 .logo {
@@ -109,26 +102,18 @@
   font-size: 36px;
   color: var(--accent);
 }
-.alpha {
-  font-size: 9px;
-  letter-spacing: 1.2px;
-  color: var(--muted);
-  border: 1px solid var(--line);
-  padding: 4px 7px;
-  margin-left: 12px;
-}
 .local {
   font-size: 10px;
   letter-spacing: 1.5px;
   color: #d3dfcd;
 }
 .home {
-  width: min(1280px, 91%);
+  width: min(1080px, 92%);
   margin: auto;
   display: grid;
-  grid-template-columns: 1fr 410px;
-  gap: 8vw;
-  padding: 72px 0 65px;
+  grid-template-columns: 1fr 380px;
+  gap: 48px;
+  padding: 32px 0;
   align-items: center;
 }
 .eyebrow {
@@ -138,20 +123,20 @@
   letter-spacing: 2px;
 }
 .intro h1 {
-  font-size: clamp(46px, 5.5vw, 78px);
-  letter-spacing: -3.8px;
-  margin: 24px 0;
+  font-size: clamp(36px, 4.5vw, 56px);
+  letter-spacing: -2px;
+  margin: 12px 0;
 }
 .intro > p {
   font-size: 16px;
-  line-height: 1.8;
+  line-height: 1.5;
   color: #bfcdc3;
 }
 .routeName {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-top: 56px;
+  margin-top: 16px;
 }
 .routeIcon {
   display: grid;
@@ -174,8 +159,8 @@
 }
 .routeStats {
   display: flex;
-  gap: 42px;
-  margin: 26px 0;
+  gap: 28px;
+  margin: 18px 0;
 }
 .metric {
   font-variant-numeric: tabular-nums;
@@ -212,16 +197,16 @@
 }
 .setup {
   min-width: 0;
-  background: #172c29ee;
-  border: 1px solid #c1d3b932;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 28px;
-  box-shadow: 0 24px 60px #06141144;
+  padding: 16px;
 }
 .setup > label,
 .setup details label {
   display: block;
-  margin: 12px 0;
+  margin: 8px 0;
   font-size: 13px;
 }
 .setup select,
@@ -236,7 +221,7 @@
   padding: 6px;
 }
 .setup > details {
-  margin: 16px 0;
+  margin: 12px 0;
   font-size: 13px;
   line-height: 1.6;
   overflow-wrap: anywhere;
@@ -257,28 +242,28 @@
   letter-spacing: 1px;
 }
 .setup h2 {
-  font-size: 25px;
-  margin-top: 24px;
+  font-size: 21px;
+  margin-top: 16px;
   margin-bottom: 12px;
   letter-spacing: -0.7px;
 }
 .setup > p {
   font-size: 13px;
-  line-height: 1.7;
-  margin-bottom: 23px;
+  line-height: 1.5;
+  margin-bottom: 12px;
 }
 .sourceButton {
   width: 100%;
   display: flex;
   align-items: center;
   text-align: left;
-  gap: 15px;
-  padding: 17px 14px;
+  gap: 10px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 4px;
   background: #ffffff03;
-  margin-top: 11px;
-  min-height: 76px;
+  margin-top: 8px;
+  min-height: 52px;
 }
 .sourceButton > span:first-child {
   font-size: 26px;
@@ -318,8 +303,8 @@
   text-align: left;
   border: 1px solid var(--line);
   background: #ffffff03;
-  border-radius: 10px;
-  padding: 13px;
+  border-radius: 4px;
+  padding: 10px;
 }
 .modeSelect strong,
 .modeSelect small {
@@ -334,15 +319,15 @@
   margin-top: 5px;
 }
 .setup > .support {
-  min-height: 5.1em;
+  min-height: 0;
   font-size: 10px;
-  margin: 16px 0;
+  margin: 12px 0;
   color: #99aca0;
 }
 .advanced {
   font-size: 11px;
   border-top: 1px solid var(--line);
-  padding: 14px 0;
+  padding: 10px 0;
   color: var(--muted);
 }
 .advanced summary {
@@ -353,7 +338,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 12px 0;
+  margin: 8px 0;
   min-height: 30px;
 }
 .advanced p {
@@ -379,7 +364,7 @@
   margin-top: 17px;
 }
 .footer {
-  padding: 22px 4.5vw;
+  padding: 14px 4.5vw;
   display: flex;
   justify-content: space-between;
   border-top: 1px solid var(--line);
@@ -393,7 +378,7 @@
   gap: 7px;
   background: #0a1e1b70;
   padding: 14px;
-  border-radius: 8px;
+  border-radius: 4px;
   font-size: 11px;
   overflow-wrap: anywhere;
 }
@@ -422,9 +407,6 @@
   margin: 4px 0;
 }
 .rideHud {
-  text-shadow:
-    0 1px 4px #000,
-    0 0 8px #0009;
   height: 100svh;
   position: relative;
   z-index: 1;
@@ -439,14 +421,13 @@
 .topbar {
   composes: panel from "./Hud.module.css";
   --hud-background: 24 44 41;
-  --hud-radius: 12px;
+  --hud-radius: 4px;
   border: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  text-shadow: 0 1px 8px #000;
-  padding: 12px 20px;
+  padding: 8px 12px;
 }
 .topbar > span:nth-child(2) {
   font-size: 13px;
@@ -459,15 +440,15 @@
 .telemetry {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   position: absolute;
   left: 24px;
   top: 110px;
-  width: 220px;
+  width: 190px;
 }
 .power {
   composes: panel from "./Hud.module.css";
-  padding: 17px 24px;
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
 }
@@ -480,7 +461,7 @@
   font-size: 8px;
 }
 .power strong {
-  font-size: 72px;
+  font-size: 56px;
   font-weight: 500;
   color: var(--accent);
   line-height: 1.25;
@@ -497,7 +478,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 14px 22px;
-  padding: 18px 24px;
+  padding: 12px 16px;
 }
 .primaryMetrics > .metric:first-child {
   width: 100%;
@@ -509,11 +490,12 @@
   font-size: 24px;
 }
 .routeHud {
+  composes: panel from "./Hud.module.css";
   position: absolute;
   right: 24px;
   top: 110px;
-  width: 340px;
-  padding: 20px;
+  width: 290px;
+  padding: 14px;
 }
 .routeHud > div {
   display: flex;
@@ -527,7 +509,7 @@
   width: 100%;
   height: 5px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 4px;
   overflow: hidden;
   margin: 20px 0 8px;
   background: #ffffff25;
@@ -553,8 +535,8 @@
   position: absolute;
   right: 24px;
   top: 330px;
-  width: 220px;
-  padding: 18px 20px;
+  width: 190px;
+  padding: 12px 16px;
   font-variant-numeric: tabular-nums;
 }
 .zombieHud > span:first-child,
@@ -568,7 +550,7 @@
 .zombieHud strong {
   display: block;
   color: #b9ff8a;
-  font-size: 58px;
+  font-size: 44px;
   font-weight: 500;
   line-height: 1.1;
   letter-spacing: -2px;
@@ -614,20 +596,19 @@
   composes: panel from "./Hud.module.css";
   --hud-background: 20 43 39;
   --hud-border: var(--line);
-  --hud-radius: 12px;
+  --hud-radius: 4px;
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 5px;
 }
 .controlGroup button {
-  text-shadow: inherit;
   border: 0;
   background: transparent;
   min-width: 44px;
   min-height: 44px;
   padding: 8px 14px;
-  border-radius: 8px;
+  border-radius: 4px;
   font-size: 12px;
 }
 .controlGroup button:hover {
@@ -648,12 +629,12 @@
   composes: panel from "./Hud.module.css";
   --hud-background: 22 43 39;
   --hud-border: var(--line);
-  --hud-radius: 18px;
+  --hud-radius: 4px;
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  padding: 28px;
+  padding: 16px;
   min-width: 290px;
   text-align: center;
 }
@@ -664,7 +645,7 @@
 .warning {
   composes: panel from "./Hud.module.css";
   --hud-background: 98 74 36;
-  --hud-radius: 12px;
+  --hud-radius: 4px;
   border: 0;
   position: absolute;
   z-index: 5;
@@ -701,7 +682,7 @@
   z-index: 3;
   overflow-y: auto;
   min-height: 100svh;
-  background: linear-gradient(120deg, #152b27a8, #152b27dc);
+  background: #152b27f2;
   display: flex;
   align-items: center;
   flex-direction: column;
@@ -713,17 +694,17 @@
   margin-bottom: 30px;
 }
 .summary h1 {
-  font-size: clamp(48px, 7vw, 80px);
+  font-size: clamp(36px, 5vw, 56px);
   letter-spacing: -3px;
 }
 .summaryGrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 32px 50px;
-  padding: 38px;
+  gap: 20px 32px;
+  padding: 20px;
   border: 1px solid var(--line);
-  border-radius: 20px;
-  margin: 16px 0;
+  border-radius: 4px;
+  margin: 12px 0;
   background: #152c2799;
 }
 .summaryGrid .metric strong {
@@ -737,7 +718,7 @@
 }
 @media (min-width: 1500px) {
   .home {
-    padding-block: 100px;
+    padding-block: 40px;
   }
 }
 @media (max-width: 1000px) {
@@ -753,7 +734,7 @@
     gap: 22px;
   }
   .setup {
-    padding: 23px;
+    padding: 16px;
   }
   .local {
     display: none;
@@ -776,16 +757,16 @@
 }
 @media (max-width: 760px) {
   .header {
-    padding: 20px 6vw;
+    padding: 14px 6vw;
   }
   .home {
     grid-template-columns: 1fr;
-    padding: 36px 0;
+    padding: 24px 0;
     gap: 30px;
     width: 88%;
   }
   .intro h1 {
-    font-size: 54px;
+    font-size: 42px;
   }
   .intro > p {
     font-size: 14px;
@@ -800,13 +781,15 @@
     display: none;
   }
   .setup {
-    padding: 24px;
+    padding: 16px 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--line);
   }
   .footer > span:last-child {
     display: none;
   }
   .shade {
-    background: linear-gradient(#132b27c9, #132b27f5);
+    background: #132b27;
   }
   .rideHud {
     padding: 12px;
@@ -832,7 +815,7 @@
     padding: 14px 18px;
   }
   .power strong {
-    font-size: 54px;
+    font-size: 42px;
   }
   .primaryMetrics {
     padding: 14px 18px;
@@ -895,14 +878,14 @@
   }
   .summaryGrid {
     grid-template-columns: repeat(2, 1fr);
-    padding: 24px;
+    padding: 16px;
     gap: 25px;
   }
   .summaryGrid .metric strong {
     font-size: 29px;
   }
   .summary {
-    gap: 15px;
+    gap: 10px;
   }
   .warning {
     top: 70px;

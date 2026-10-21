@@ -13,7 +13,8 @@ button {
 button:focus-visible,
 a:focus-visible,
 summary:focus-visible,
-input:focus-visible {
+input:focus-visible,
+select:focus-visible {
   outline: 3px solid var(--accent);
   outline-offset: 4px;
 }
@@ -34,9 +35,9 @@ p {
   justify-content: center;
   gap: 12px;
   min-height: 44px;
-  padding: 12px 20px;
+  padding: 8px 14px;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: 4px;
   background: #ffffff09;
   font-weight: 600;
 }

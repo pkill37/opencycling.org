@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "route:build": "tsx scripts/build-route.ts",
+    "route:cities": "node --import tsx scripts/build-city-routes.ts",
     "route:alpe": "tsx scripts/build-alpe.ts",
     "dev": "next dev",
     "dev:https": "next dev --experimental-https",

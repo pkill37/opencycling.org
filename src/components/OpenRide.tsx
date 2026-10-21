@@ -178,8 +178,7 @@ export default function OpenRide({
     if (!host.current || !worldActive) return;
     const element = host.current;
     import("@/game/world/scene")
-      .then(async ({ createWorld, preloadWorldTextures }) => {
-        await preloadWorldTextures();
+      .then(({ createWorld }) => {
         if (stopped) return;
         try {
           view = createWorld(
@@ -421,8 +420,8 @@ export default function OpenRide({
                 <p>
                   Direction follows input order.{" "}
                   {route.loop ? "One closed lap" : "Point to point"}. Gain is
-                  the sum of positive supplied elevation differences; no
-                  smoothing.
+                  the sum of positive differences in the loaded elevation
+                  profile; bundled previews may use documented smoothing.
                 </p>
               </details>
             </div>
@@ -448,19 +447,25 @@ export default function OpenRide({
                       ? "demo"
                       : route.id === "alpe-d-huez-test"
                         ? "alpe"
-                        : "import"
+                        : route.id === "marseille" || route.id === "paris"
+                          ? route.id
+                          : "import"
                   }
                   onChange={async (e) => {
                     setRouteError("");
                     if (e.target.value === "demo") setRoute(demoRoute);
-                    if (e.target.value === "alpe") {
+                    if (
+                      ["alpe", "marseille", "paris"].includes(e.target.value)
+                    ) {
+                      const slug =
+                        e.target.value === "alpe"
+                          ? "alpe-d-huez"
+                          : e.target.value;
                       setRouteLoading(true);
                       try {
-                        const response = await fetch(
-                          "/routes/alpe-d-huez.json",
-                        );
+                        const response = await fetch(`/routes/${slug}.json`);
                         if (!response.ok)
-                          throw new Error("Could not load Alpe d’Huez.");
+                          throw new Error("Could not load the selected route.");
                         const { buildRoute } =
                           await import("@/game/route/package");
                         setRoute(buildRoute(await response.json()));
@@ -478,20 +483,25 @@ export default function OpenRide({
                 >
                   <option value="demo">Synthetic training loop (demo)</option>
                   {route.id !== demoRoute.id &&
-                    route.id !== "alpe-d-huez-test" && (
+                    route.id !== "alpe-d-huez-test" &&
+                    route.id !== "marseille" &&
+                    route.id !== "paris" && (
                       <option value="import">{route.name}</option>
                     )}
                   <option value="alpe">Alpe d’Huez (GPX test ascent)</option>
-                  <option disabled>
-                    Marseille Corniche — source review pending
+                  <option value="marseille">
+                    Marseille Corniche (flat GPX preview)
                   </option>
-                  <option disabled>
-                    Paris circuit — edition/source review pending
-                  </option>
+                  <option value="paris">Paris 2023 finale (GPX preview)</option>
                 </select>
               </label>
+              {(route.id === "marseille" || route.id === "paris") && (
+                <a href={`/${route.id}.gpx`} download>
+                  Download source GPX
+                </a>
+              )}
               <RouteImport onSelect={setRoute} />
-              {routeLoading && <p role="status">Loading Alpe d’Huez…</p>}
+              {routeLoading && <p role="status">Loading route…</p>}
               {routeError && <p role="alert">{routeError}</p>}
               <PhysicsSettings value={physics} onChange={setPhysics} />
               <p>
