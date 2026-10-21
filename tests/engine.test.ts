@@ -183,3 +183,60 @@ test("pause clears fractional frame time before resuming", () => {
   engine.advance(1 / 120, 0);
   assert.equal(engine.state.elapsedSeconds, 1 / 60);
 });
+
+test("trainer freshness and loss thresholds preserve their exact boundaries", () => {
+  const engine = new RideEngine(route);
+  engine.attach(fake, 0);
+  engine.ingest({ source: "ftms", timestampMs: 0, powerWatts: 280 });
+  assert.equal(engine.input(3000).power, 280);
+  assert.equal(engine.warning, "");
+  assert.equal(engine.input(6500).power, 140);
+  assert.match(engine.warning, /stale/);
+  assert.equal(engine.input(10000).power, 0);
+  assert.equal(engine.paused, false);
+  assert.equal(engine.input(10001).power, 0);
+  assert.equal(engine.paused, true);
+  assert.match(engine.warning, /lost/);
+});
+
+test("cadence falls back independently when FTMS cadence becomes stale", () => {
+  const engine = new RideEngine(route);
+  engine.attach(fake, 0);
+  engine.ingest({ source: "ftms", timestampMs: 0, cadenceRpm: 90 });
+  engine.ingest({ source: "cycling-power", timestampMs: 3000, cadenceRpm: 75 });
+  engine.ingest({ source: "ftms", timestampMs: 3000, powerWatts: 200 });
+  assert.equal(engine.input(3000).cadence, 90);
+  assert.equal(engine.input(3001).cadence, 75);
+  engine.ingest({ source: "ftms", timestampMs: 6001, powerWatts: 200 });
+  assert.equal(engine.input(6001).cadence, 78);
+});
+
+test("long frames are capped and negative frames cannot advance the ride", () => {
+  const capped = new RideEngine(route);
+  const delayed = new RideEngine(route);
+  for (const engine of [capped, delayed]) {
+    const simulator = new SimulatorSource();
+    engine.attach(simulator, 0);
+    engine.ingest(simulator.sample(0));
+  }
+  delayed.advance(-1, 0);
+  assert.equal(delayed.state.elapsedSeconds, 0);
+  delayed.advance(10, 0);
+  capped.advance(0.25, 0);
+  assert.deepEqual(delayed.state, capped.state);
+  assert.ok(delayed.state.elapsedSeconds > 0);
+  assert.ok(delayed.state.elapsedSeconds <= 0.25);
+});
+
+test("summary weights changing power by elapsed time and starts at zero", () => {
+  const engine = new RideEngine(route);
+  assert.equal(engine.summary().averagePowerWatts, 0);
+  assert.equal(engine.summary().averageSpeedMetersPerSecond, 0);
+  engine.step(1, 100, 70);
+  engine.step(3, 300, 90);
+  const summary = engine.summary();
+  assert.equal(summary.elapsedSeconds, 4);
+  assert.equal(summary.averagePowerWatts, 250);
+  assert.equal(summary.maxPowerWatts, 300);
+  assert.equal(summary.averageSpeedMetersPerSecond, summary.distanceMeters / 4);
+});

@@ -1,6 +1,6 @@
-export const siteTitle = "OpenRide — Open source virtual cycling";
+export const siteTitle = "OpenRide — Free Virtual Cycling & Indoor Training";
 export const siteDescription =
-  "Ride a GPX reference course in your browser. Connect a Bluetooth smart trainer or use the keyboard simulator. Open source cycling simulation with explicit data and physics assumptions.";
+  "Free, open source virtual cycling in your browser. Ride Alpe d’Huez, Paris or Marseille with a Bluetooth smart trainer, or try the keyboard simulator.";
 
 export function parseSiteUrl(value: string | undefined): URL | undefined {
   if (!value?.trim()) return undefined;

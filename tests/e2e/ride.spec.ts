@@ -81,7 +81,7 @@ test("simulator ride, controls, pause, summary and restart", async ({
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "Your next ride starts here." }),
+    page.getByRole("heading", { name: "Free virtual cycling in your browser." }),
   ).toBeVisible();
   await expect(page.locator("canvas")).toHaveCount(0);
   await page.screenshot({

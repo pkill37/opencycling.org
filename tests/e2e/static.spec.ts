@@ -15,7 +15,9 @@ test("landing content and SEO are present without JavaScript", async ({
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
   await page.goto("/");
-  await expect(page).toHaveTitle("OpenRide — Open source virtual cycling");
+  await expect(page).toHaveTitle(
+    "OpenRide — Free Virtual Cycling & Indoor Training",
+  );
   await expect(page.locator('meta[name="description"]')).toHaveAttribute(
     "content",
     /Bluetooth smart trainer/,
@@ -25,6 +27,24 @@ test("landing content and SEO are present without JavaScript", async ({
     /OpenRide/,
   );
   await expect(page.locator("h1")).toHaveCount(1);
+  await expect(page.locator("h1")).toHaveText(
+    "Free virtual cycling in your browser.",
+  );
+  await expect(
+    page.getByRole("heading", { name: "How do I connect a smart trainer?" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Set up a virtual cycling ride" }),
+  ).toHaveAttribute("href", "/ride/");
+  const structuredData = JSON.parse(
+    (await page.locator('script[type="application/ld+json"]').textContent())!,
+  );
+  const app = structuredData["@graph"].find(
+    (entry: { "@type": string }) => entry["@type"] === "WebApplication",
+  );
+  expect(app.name).toBe("OpenRide");
+  expect(app.isAccessibleForFree).toBe(true);
+  expect(app.offers.price).toBe("0");
   for (const name of ["Alpe d’Huez", "Marseille", "Paris"]) {
     await expect(
       page.getByRole("button", { name: `Select ${name}`, exact: true }),

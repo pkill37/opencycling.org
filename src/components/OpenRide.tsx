@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { LandingIntro, LandingGuide } from "./LandingContent";
 import {
   useCallback,
   useEffect,
@@ -61,7 +62,7 @@ export default function OpenRide({
         <section className={styles.home}>
           <div className={styles.intro}>
             <div className={styles.eyebrow}>PICK A ROAD. MAKE IT YOURS.</div>
-            <h1>Your next ride starts here.</h1>
+            <LandingIntro />
             <RouteSelection
               selected="alpe-d-huez-test"
               loading
@@ -86,6 +87,7 @@ export default function OpenRide({
               <p role="status">Loading route…</p>
             )}
           </div>
+          {!initialSetup && <LandingGuide />}
         </section>
       </main>
     );
@@ -457,10 +459,7 @@ function LoadedOpenRide({
           <section className={styles.home}>
             <div className={styles.intro}>
               <div className={styles.eyebrow}>PICK A ROAD. MAKE IT YOURS.</div>
-              <h1>Your next ride starts here.</h1>
-              <p>
-                Three French roads. Your power. One open source cycling game.
-              </p>
+              <LandingIntro />
               <RouteSelection
                 selected={menuRoute?.id ?? route.id}
                 loading={routeLoading}
@@ -645,6 +644,7 @@ function LoadedOpenRide({
                 </div>
               </details>
             </div>
+            {!initialSetup && <LandingGuide />}
           </section>
         </>
       )}
