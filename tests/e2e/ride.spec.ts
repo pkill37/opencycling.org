@@ -239,6 +239,8 @@ test("FTMS browser notifications drive the ride and disconnect offers reconnect"
   await page.getByRole("button", { name: "Connect smart trainer" }).click();
   await expect(page.getByText("Mock FTMS Trainer · connected")).toBeHidden();
   await page.getByText("Debug settings", { exact: true }).click();
+  await expect(page.getByText("Mock FTMS Trainer · connected")).toBeHidden();
+  await page.getByText("Bluetooth debug log", { exact: true }).click();
   await expect(page.getByText("Mock FTMS Trainer · connected")).toBeVisible();
   await expect(page.getByText("250 W · 90 rpm · 36.0 km/h raw")).toBeVisible();
   await startRide(page);

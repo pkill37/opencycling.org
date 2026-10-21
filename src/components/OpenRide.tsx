@@ -485,9 +485,10 @@ function LoadedOpenRide({
               {routeError && <p role="alert">{routeError}</p>}
 
               <div className={styles.setupControls}>
-                <div className={styles.sourceSelect}>
+                <div className={styles.bluetoothControl}>
                   <button
-                    className={`${styles.sourceButton} ${source === "bluetooth" ? styles.selected : ""}`}
+                    className={styles.sourceButton}
+                    aria-label="Connect smart trainer"
                     onClick={() => connect()}
                     disabled={
                       !availability.available ||
@@ -499,12 +500,32 @@ function LoadedOpenRide({
                       ].includes(trainer.state)
                     }
                   >
-                    <span>⌁</span>
-                    <div>
-                      <strong>Connect smart trainer</strong>
-                      <small>Bluetooth · FTMS / Cycling Power</small>
-                    </div>
-                    <span>↗</span>
+                    <span>
+                      <strong>Bluetooth trainer</strong>
+                      <small>
+                        {!hydrated
+                          ? "Checking support…"
+                          : !availability.available
+                            ? "Simulator · debugging"
+                            : trainer.state === "connected"
+                              ? trainer.label
+                              : "FTMS / Cycling Power"}
+                      </small>
+                    </span>
+                    <span className={styles.bluetoothAction}>
+                      {!availability.available
+                        ? "Unavailable"
+                        : trainer.state === "connected"
+                          ? "Connected"
+                          : [
+                                "connecting",
+                                "requesting-device",
+                                "discovering-services",
+                                "subscribing",
+                              ].includes(trainer.state)
+                            ? "Connecting…"
+                            : "Connect"}
+                    </span>
                   </button>
                 </div>
                 <div className={styles.modeSelect} aria-label="Ride mode">
@@ -537,56 +558,55 @@ function LoadedOpenRide({
                   Start ride <span>→</span>
                 </button>
               </div>
-              <p className={styles.support}>
-                {availability.message}
-                {hydrated &&
-                  !availability.available &&
-                  " Simulator enabled for debugging."}
-              </p>
               <details className={styles.debugSettings}>
                 <summary>Debug settings</summary>
                 <div className={styles.debugGrid}>
                   {setup && source === "bluetooth" && (
-                    <div className={styles.connection} aria-live="polite">
-                      <strong>
-                        {trainer.label} · {trainer.state.replaceAll("-", " ")}
-                      </strong>
-                      <span>
-                        {trainer.services.join(" + ") ||
-                          "No services detected yet"}
-                      </span>
-                      <div>
-                        {sample?.powerWatts ?? "—"} W ·{" "}
-                        {sample?.cadenceRpm ?? "—"} rpm ·{" "}
-                        {sample?.speedMetersPerSecond === undefined
-                          ? "—"
-                          : (sample.speedMetersPerSecond * 3.6).toFixed(1)}{" "}
-                        km/h raw
-                      </div>
-                      <span>
-                        Last packet:{" "}
-                        {sample
-                          ? new Date(sample.timestampMs).toLocaleTimeString()
-                          : "Waiting"}
-                      </span>
-                      {trainer.features.map((f) => (
-                        <small key={f}>{f}</small>
-                      ))}
-                      {trainer.error && <p role="alert">{trainer.error}</p>}
-                      {trainer.diagnostics.length > 0 && (
-                        <details className={styles.diagnostics} open>
-                          <summary>Bluetooth debug log</summary>
-                          <ol>
+                    <details>
+                      <summary>Bluetooth debug log</summary>
+                      <div className={styles.connection} aria-live="polite">
+                        <strong>
+                          {trainer.label} · {trainer.state.replaceAll("-", " ")}
+                        </strong>
+                        <span>
+                          {trainer.services.join(" + ") ||
+                            "No services detected yet"}
+                        </span>
+                        <div>
+                          {sample?.powerWatts ?? "—"} W ·{" "}
+                          {sample?.cadenceRpm ?? "—"} rpm ·{" "}
+                          {sample?.speedMetersPerSecond === undefined
+                            ? "—"
+                            : (sample.speedMetersPerSecond * 3.6).toFixed(
+                                1,
+                              )}{" "}
+                          km/h raw
+                        </div>
+                        <span>
+                          Last packet:{" "}
+                          {sample
+                            ? new Date(sample.timestampMs).toLocaleTimeString()
+                            : "Waiting"}
+                        </span>
+                        {trainer.features.map((f) => (
+                          <small key={f}>{f}</small>
+                        ))}
+                        {trainer.error && <p role="alert">{trainer.error}</p>}
+                        {trainer.diagnostics.length > 0 && (
+                          <ol className={styles.bluetoothLog}>
                             {trainer.diagnostics.map((entry, index) => (
                               <li key={`${entry}-${index}`}>{entry}</li>
                             ))}
                           </ol>
-                        </details>
-                      )}
-                      <button className="button" onClick={() => connect(true)}>
-                        Reconnect
-                      </button>
-                    </div>
+                        )}
+                        <button
+                          className="button"
+                          onClick={() => connect(true)}
+                        >
+                          Reconnect
+                        </button>
+                      </div>
+                    </details>
                   )}
                   {!availability.available && (
                     <details className={styles.connection}>

@@ -183,13 +183,16 @@
   padding: 8px;
   margin: 4px;
 }
+.bluetoothControl,
 .setup > .debugSettings {
-  margin: 16px 0 0;
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 0 14px;
   background: #ffffff03;
   font-size: 12px;
+}
+.setup > .debugSettings {
+  margin: 12px 0 0;
 }
 .debugSettings > summary {
   padding: 12px 0;
@@ -236,42 +239,46 @@
   line-height: 1.5;
   margin-bottom: 12px;
 }
-.sourceSelect {
+.bluetoothControl {
   display: flex;
+  padding: 0;
 }
 .sourceButton {
   width: 100%;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   text-align: left;
-  gap: 6px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: #ffffff03;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
   min-height: 44px;
 }
-.sourceButton > span:first-child {
-  font-size: 20px;
-  color: #c6d5b8;
-}
-.sourceButton > span:last-child {
-  margin-left: auto;
+.sourceButton:hover:not(:disabled) {
+  background: #ffffff07;
 }
 .sourceButton strong,
 .sourceButton small {
   display: block;
 }
 .sourceButton strong {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
 }
 .sourceButton small {
   font-size: 10px;
   color: var(--muted);
-  margin-top: 4px;
+  margin-top: 2px;
 }
-.sourceButton.selected,
+.bluetoothAction {
+  font-size: 11px;
+  color: var(--accent);
+}
+.sourceButton:disabled .bluetoothAction {
+  color: var(--muted);
+}
 .modeSelect button.selected {
   border-color: #d9f77e90;
   background: #d9f77e0a;
@@ -302,12 +309,6 @@
   color: var(--muted);
   font-size: 9px;
   margin-top: 5px;
-}
-.setup > .support {
-  min-height: 0;
-  font-size: 10px;
-  margin: 8px 0;
-  color: #99aca0;
 }
 .advanced {
   font-size: 11px;
@@ -365,21 +366,12 @@
 .connection > small {
   color: var(--muted);
 }
-.diagnostics {
-  border-top: 1px solid var(--line);
-  margin-top: 4px;
-  padding-top: 8px;
-}
-.diagnostics summary {
-  cursor: pointer;
-  color: #d9f77e;
-}
-.diagnostics ol {
+.bluetoothLog {
   margin: 8px 0 0;
   padding-left: 18px;
   color: var(--muted);
 }
-.diagnostics li {
+.bluetoothLog li {
   margin: 4px 0;
 }
 .rideHud {
