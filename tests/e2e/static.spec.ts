@@ -31,8 +31,16 @@ test("landing content and SEO are present without JavaScript", async ({
     "Free virtual cycling in your browser.",
   );
   await expect(
-    page.getByRole("heading", { name: "How do I connect a smart trainer?" }),
+    page.getByRole("heading", { name: "Frequently asked questions" }),
   ).toBeVisible();
+  const trainerFaq = page.locator("details").filter({
+    has: page
+      .locator("summary")
+      .filter({ hasText: "How do I connect a smart trainer?" }),
+  });
+  await expect(trainerFaq.locator("p")).toBeHidden();
+  await trainerFaq.locator("summary").click();
+  await expect(trainerFaq.locator("p")).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Set up a virtual cycling ride" }),
   ).toHaveAttribute("href", "/ride/");
