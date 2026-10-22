@@ -8,7 +8,7 @@
 6. **Connection UX:** availability/security status, device/services/features, live optional fields and timestamp, actionable errors, reconnect and simulator selection. Power expires independently of unrelated packets: decay after 3 seconds and pause after 10 seconds.
 7. **Route:** original closed Catmull-Rom loop sampled into an arc-length table. Binary-search distance lookup interpolates position, elevation, heading and decimal gradient. One lap completes the ride.
 8. **Road:** reusable ribbon mesh built from the same sampled route and lateral normals, with shoulders and edge/center markings.
-9. **World:** procedural terrain matched to route elevation, sunlight, fog, low-poly distant hills, instanced trees/rocks and simple structures. Limit pixel ratio and avoid textures/postprocessing.
+9. **World:** procedural terrain fitted beneath GPX road elevation, regional vegetation, geographically anchored water and simplified landmarks, sunlight, fog, distant alpine hills and instanced props. Reuse small local textures, limit pixel ratio and avoid postprocessing. See `GEOGRAPHIC-ROUTES.md` for scenery assumptions and geographic limitations.
 10. **Rider/cameras:** procedural bike and cyclist, speed-linked wheels, cadence-linked pedals and articulated legs; smoothly following chase and first-person cameras.
 11. **Physics:** configurable mass, drag, rolling resistance, drivetrain efficiency, gravity, low-speed drive-force clamp and speed cap, using the README formulas.
 12. **Loop:** requestAnimationFrame accumulator at 60 Hz, bounded catch-up, independent 10 Hz HUD publication. Pause on hidden tab; do not count paused time.

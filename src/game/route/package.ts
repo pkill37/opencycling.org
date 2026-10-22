@@ -33,6 +33,22 @@ export interface RoutePackage {
 
 const earth = 6371008.8;
 const radians = Math.PI / 180;
+// Shared by route geometry and geographically anchored scenery: x east, z north.
+export function projectGeographic(
+  origin: GeographicSample,
+  sample: GeographicSample,
+) {
+  const lat = sample.latitude * radians;
+  const lat0 = origin.latitude * radians;
+  const dl = (sample.longitude - origin.longitude) * radians;
+  const bearing = Math.atan2(
+    Math.sin(dl) * Math.cos(lat),
+    Math.cos(lat0) * Math.sin(lat) -
+      Math.sin(lat0) * Math.cos(lat) * Math.cos(dl),
+  );
+  const radius = horizontalDistance(origin, sample);
+  return { x: radius * Math.sin(bearing), z: radius * Math.cos(bearing) };
+}
 export function horizontalDistance(a: GeographicSample, b: GeographicSample) {
   const p = (b.latitude - a.latitude) * radians;
   const q = (b.longitude - a.longitude) * radians;
@@ -161,18 +177,8 @@ export function buildRoute(input: unknown): CyclingRoute {
     gain = 0;
   // Azimuthal equidistant local frame, x east and z north. No world/render dependencies.
   const points: RoutePoint[] = p.samples.map((s) => {
-    const lat = s.latitude * radians,
-      lat0 = origin.latitude * radians;
-    const dl = (s.longitude - origin.longitude) * radians;
-    const bearing = Math.atan2(
-      Math.sin(dl) * Math.cos(lat),
-      Math.cos(lat0) * Math.sin(lat) -
-        Math.sin(lat0) * Math.cos(lat) * Math.cos(dl),
-    );
-    const radius = horizontalDistance(origin, s);
     return {
-      x: radius * Math.sin(bearing),
-      z: radius * Math.cos(bearing),
+      ...projectGeographic(origin, s),
       y: s.elevation,
       elevationMeters: s.elevation,
       latitude: s.latitude,

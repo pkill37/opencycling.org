@@ -33,14 +33,17 @@ test("landing content and SEO are present without JavaScript", async ({
   await expect(
     page.getByRole("heading", { name: "Frequently asked questions" }),
   ).toBeVisible();
-  const trainerFaq = page.locator("details").filter({
-    has: page
-      .locator("summary")
-      .filter({ hasText: "How do I connect a smart trainer?" }),
-  });
-  await expect(trainerFaq.locator("p")).toBeHidden();
-  await trainerFaq.locator("summary").click();
-  await expect(trainerFaq.locator("p")).toBeVisible();
+  const faq = page.getByRole("region", { name: "Frequently asked questions" });
+  const questions = faq.locator("details");
+  await expect(questions).toHaveCount(10);
+  for (const question of await questions.all()) {
+    await expect(question.locator("summary")).toBeVisible();
+    await expect(question.locator("p")).toBeHidden();
+    await question.locator("summary").click();
+    await expect(question.locator("p")).toBeVisible();
+    await question.locator("summary").click();
+    await expect(question.locator("p")).toBeHidden();
+  }
   await expect(
     page.getByRole("link", { name: "Set up a virtual cycling ride" }),
   ).toHaveAttribute("href", "/ride/");

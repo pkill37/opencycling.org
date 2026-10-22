@@ -101,6 +101,41 @@ and validated seam tangent/grade checks remain pending. The schema contains
 reproducible ribbon inputs, not terrain meshes. Width 6.8 m and zero camber are
 assumed. No fictional terrain is allowed to override the supplied road height.
 
+## Illustrative scenery
+
+Bundled routes now have deterministic regional scenery: wooded alpine slopes and
+open rocky upper ground at Alpe d’Huez; Mediterranean water, pale shoreline,
+seawalls and warm buildings at Marseille; tree-lined avenues, gardens, stone
+facades, the Arc de Triomphe and the Concorde obelisk at Paris. The Seine and
+Mediterranean use simplified geographic outlines projected into the same metric
+frame as the GPX. Vallon des Auffes has a simplified fishing-port/arch cue.
+
+These are recognizable illustrations, **not surveyed reconstructions**. Coastline
+anchors, vegetation zones, building styles, landmarks and water heights are
+renderer-only assumptions. The Marseille coastline includes a 25 m westward
+visual clearance margin; its sea is at -2.5 m relative to the degraded flat road.
+The Seine is drawn at an illustrative 26 m. Ground is fitted to nearby GPX road
+segments, lowered beneath the road triangles, and joined by roadside verges.
+Road coordinates, heights, gradients, curvature and physics remain unchanged.
+Numbered alpine bend signs are deferred until their locations are verified.
+
+Geographic context references:
+[Alpe d’Huez's official climb description](https://www.alpedhuez.com/en/activities/summer-activities/bike/the-21-bends/),
+[Marseille Tourism's Corniche description](https://www.marseille-tourisme.com/en/discover-marseille/culture-heritage/discover-the-sites-and-monuments-in-marseille/la-corniche-kennedy/),
+and [Paris's Champs-Élysées map](https://cdn.paris.fr/paris/2024/07/03/plan-web-champs-elysees-240701-XlMi.pdf).
+No external geographic imagery or building datasets are downloaded at runtime.
+
+Scenery loads with the world after ride start. Existing local WebP textures are
+reused; small facade/stone/roof patterns are drawn locally. Failed texture loads
+retain solid-colour materials. Vegetation and repeated props use spatially
+batched instances; terrain uses 192 m tiles with shared boundary heights. Terrain
+allocation is capped at 900 tiles, general roadside prop sampling at about 1,800
+stations, and Paris avenue trees at about 1,200 stations, with up to two candidates
+per station. Large imports receive bounded previews, not complete terrain coverage
+for the maximum supported import. Imported routes use neutral scenery unless
+their package ID and starting geography match a bundled profile. Material and
+texture ownership includes unused assets and late-loading textures on teardown.
+
 ## Dynamics baseline and limitations
 
 - 75 kg rider, 9 kg bike, CdA 0.32 m², Crr 0.004, air density 1.225 kg/m³.

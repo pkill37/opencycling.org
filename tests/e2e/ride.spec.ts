@@ -81,13 +81,25 @@ test("simulator ride, controls, pause, summary and restart", async ({
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "Free virtual cycling in your browser." }),
+    page.getByRole("heading", {
+      name: "Free virtual cycling in your browser.",
+    }),
   ).toBeVisible();
   await expect(page.locator("canvas")).toHaveCount(0);
   await page.screenshot({
     path: "test-results/home-desktop.png",
     fullPage: true,
   });
+  const modes = page.getByRole("group", { name: "Ride mode", exact: true });
+  await expect(modes.getByRole("button", { name: "Online" })).toBeDisabled();
+  await modes.getByRole("button", { name: "Zombies Mode" }).click();
+  await expect(
+    modes.getByRole("button", { name: "Zombies Mode" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await modes.getByRole("button", { name: "Open Ride", exact: true }).click();
+  await expect(
+    modes.getByRole("button", { name: "Open Ride", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await startRide(page);
   await expect(
     page.getByText("VIRTUAL TRAINER", { exact: true }),

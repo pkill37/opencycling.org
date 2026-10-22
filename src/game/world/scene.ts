@@ -4,6 +4,7 @@ import type { CyclingRoute } from "../../types";
 import type { RideEngine } from "../loop/engine";
 import type { ZombiesSnapshot } from "../modes/zombies";
 import { createRider } from "./rider";
+import { createScenery } from "./scenery";
 
 function ribbon(
   route: CyclingRoute,
@@ -11,9 +12,11 @@ function ribbon(
   offset: number,
   lift: number,
   color: number,
+  material?: T.MeshStandardMaterial,
 ) {
   const positions: number[] = [],
-    indices: number[] = [];
+    indices: number[] = [],
+    uvs: number[] = [];
   route.points.forEach((p, i) => {
     const a = route.points[Math.max(0, i - 1)],
       b = route.points[Math.min(route.points.length - 1, i + 1)];
@@ -25,23 +28,26 @@ function ribbon(
         p.y + lift,
         p.z - Math.sin(heading) * lateral,
       );
+      uvs.push(((side + 1) * width) / 8, p.distanceMeters / 8);
     }
     if (i) {
       const n = i * 2;
-      indices.push(n - 2, n - 1, n, n - 1, n + 1, n);
+      indices.push(n - 2, n, n - 1, n - 1, n, n + 1);
     }
   });
   const geometry = new T.BufferGeometry();
   geometry.setAttribute("position", new T.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new T.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   const mesh = new T.Mesh(
     geometry,
-    new T.MeshStandardMaterial({
-      color,
-      roughness: 1,
-      side: T.DoubleSide,
-    }),
+    material ??
+      new T.MeshStandardMaterial({
+        color,
+        roughness: 1,
+        side: T.DoubleSide,
+      }),
   );
   mesh.receiveShadow = true;
   return mesh;
@@ -197,9 +203,15 @@ export function createWorld(
   sun.shadow.normalBias = 0.04;
   sun.shadow.bias = -0.0002;
   scene.add(sun, sun.target);
+  const scenery = createScenery(scene, route, renderer);
+  if (scenery.region === "alpine") {
+    camera.far = 8000;
+    camera.updateProjectionMatrix();
+  }
+  renderer.domElement.dataset.scenery = scenery.region;
   scene.add(
-    ribbon(route, 8.3, 0, -0.03, 0xd2cabb),
-    ribbon(route, 6.8, 0, 0.02, 0x747777),
+    ribbon(route, 8.3, 0, -0.03, 0xd2cabb, scenery.materials.gravel),
+    ribbon(route, 6.8, 0, 0.02, 0x747777, scenery.materials.road),
     ribbon(route, 0.11, -3.1, 0.035, 0xe4e4c8),
     ribbon(route, 0.11, 3.1, 0.035, 0xe4e4c8),
   );
@@ -429,9 +441,14 @@ export function createWorld(
         camera.position.copy(desired);
         initialized = true;
       } else camera.position.lerp(desired, 1 - Math.exp(-dt * 5));
+      camera.position.y = Math.max(
+        camera.position.y,
+        scenery.groundAt(camera.position.x, camera.position.z) + 0.5,
+      );
       camera.lookAt(ahead.x, ahead.y + (cameraMode ? 1.5 : 1), ahead.z);
       sun.position.set(point.x - 80, point.y + 150, point.z + 65);
       sun.target.position.set(point.x, point.y, point.z);
+      scenery.update(dt, point.x, point.z);
       renderer.render(scene, camera);
     },
     dispose() {
@@ -460,8 +477,13 @@ export function createWorld(
         if (object instanceof T.InstancedMesh) object.dispose();
       });
       geometries.forEach((geometry) => geometry.dispose());
-      materials.forEach((material) => material.dispose());
-      textures.forEach((texture) => texture.dispose());
+      materials.forEach((material) => {
+        if (!scenery.materials.owns(material)) material.dispose();
+      });
+      textures.forEach((texture) => {
+        if (!scenery.materials.owns(texture)) texture.dispose();
+      });
+      scenery.dispose();
       sun.shadow.dispose();
       renderer.dispose();
       renderer.domElement.remove();

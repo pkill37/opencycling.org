@@ -47,6 +47,59 @@ export function LandingGuide() {
         </p>
       </details>
       <details>
+        <summary>Is OpenRide free, and do I need an account?</summary>
+        <p>
+          OpenRide is free to play and open source. You can choose a route,
+          connect a compatible trainer or use the simulator, and start riding
+          without an account or subscription.
+        </p>
+      </details>
+      <details>
+        <summary>What does my browser need to run OpenRide?</summary>
+        <p>
+          The 3D ride requires JavaScript and WebGL. A trainer connection also
+          requires HTTPS and Web Bluetooth support on your browser and device.
+          The setup screen checks Bluetooth availability; you can use the
+          simulator when Bluetooth is unavailable.
+        </p>
+      </details>
+      <details>
+        <summary>
+          Does OpenRide automatically change trainer resistance?
+        </summary>
+        <p>
+          No. OpenRide reads trainer telemetry without sending resistance
+          commands. Your power and the virtual road gradient affect your speed
+          in the game; adjust resistance on your trainer separately.
+        </p>
+      </details>
+      <details>
+        <summary>Can I import my own GPX cycling route?</summary>
+        <p>
+          Yes. Open the route import option during setup and select a GPX file
+          or an OpenRide route package in JSON format, up to 20 MB. For GPX
+          files, choose a track and segment, validate it, then review the
+          preview before loading. Files are processed locally in your browser.
+        </p>
+      </details>
+      <details>
+        <summary>Why won’t my Bluetooth trainer connect?</summary>
+        <p>
+          Check the Bluetooth availability message in setup, wake your trainer
+          and keep it nearby. Close other apps connected to the trainer, check
+          site permissions and try connecting again. You can also review the
+          Bluetooth diagnostics in setup or use the simulator to try a ride.
+        </p>
+      </details>
+      <details>
+        <summary>What is Zombies Mode?</summary>
+        <p>
+          Zombies Mode adds a chase to your ride. Choose it during setup and
+          keep riding to stay ahead of the horde. The ride ends if the zombies
+          catch you, and the summary shows how long you survived.
+        </p>
+      </details>
+      <details>
         <summary>Where does my ride data go?</summary>
         <p>
           Trainer telemetry and cycling simulation stay in your browser.

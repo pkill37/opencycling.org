@@ -527,7 +527,11 @@ function LoadedOpenRide({
                     </span>
                   </button>
                 </div>
-                <div className={styles.modeSelect} aria-label="Ride mode">
+                <div
+                  className={styles.modeSelect}
+                  role="group"
+                  aria-label="Ride mode"
+                >
                   <button
                     className={mode === "ride" ? styles.selected : ""}
                     aria-pressed={mode === "ride"}

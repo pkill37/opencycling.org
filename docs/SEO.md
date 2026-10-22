@@ -33,3 +33,21 @@ After deployment:
 Run `npm run check` and `npm run test:e2e` before publishing. The static E2E spec
 checks content and structured data with JavaScript disabled, crawler files, the
 ride noindex directive, and landing performance constraints.
+
+## Landing page review (October 2026)
+
+- The homepage has one descriptive H1, a topic-specific title and description,
+  English language metadata, Open Graph/Twitter previews, and WebApplication
+  JSON-LD describing the free app.
+- All ten FAQ answers are included in the exported HTML inside native `details`
+  elements. They can be opened without JavaScript. Content covers actual routes,
+  trainer limitations, simulator use, imports, privacy and game modes.
+- Keep the existing app structured data. Google retired FAQ rich results in May
+  2026, so FAQPage markup is not needed for that search feature. See
+  [Google’s documentation updates](https://developers.google.com/search/updates#june-2026).
+- Production origin configuration remains essential: a build without `SITE_URL`
+  intentionally has no canonical, absolute social image URLs or sitemap entries.
+  Confirm the deployed export was built with the real origin.
+- This is a source and local export review. Public-host redirects, index status,
+  Search Console data and real-user Core Web Vitals require deployment checks
+  using the steps above.
