@@ -1,3 +1,5 @@
+import type { TerrainTileData } from "./terrain-data";
+import type { ElevationSampler } from "../route/terrain";
 import * as T from "three";
 import type { CyclingRoute } from "../../types";
 import { lookupRoute } from "../route/route";
@@ -18,7 +20,32 @@ export function addTerrain(
   route: CyclingRoute,
   land: Landscape,
   materials: WorldMaterials,
+  prepared?: TerrainTileData[],
 ) {
+  if (prepared)
+    return prepared.map((tile) => {
+      const geometry = new T.BufferGeometry();
+      geometry.setAttribute(
+        "position",
+        new T.BufferAttribute(tile.positions, 3),
+      );
+      geometry.setAttribute("normal", new T.BufferAttribute(tile.normals, 3));
+      geometry.setAttribute("color", new T.BufferAttribute(tile.colors, 3));
+      geometry.setAttribute("uv", new T.BufferAttribute(tile.uvs, 2));
+      geometry.setIndex(new T.BufferAttribute(tile.indices, 1));
+      geometry.groups = tile.groups;
+      const mesh = new T.Mesh(
+        geometry,
+        land.region === "paris"
+          ? [materials.grass, materials.stone]
+          : materials.grass,
+      );
+      mesh.receiveShadow = true;
+      mesh.userData.centerX = tile.centerX;
+      mesh.userData.centerZ = tile.centerZ;
+      root.add(mesh);
+      return mesh;
+    });
   const tileSize = 192;
   const occupied = new Set<string>();
   // Only allocate a corridor around the route, not its entire bounding rectangle.
@@ -33,6 +60,20 @@ export function addTerrain(
         if (occupied.size < 900) occupied.add(`${tx + dx},${tz + dz}`);
       }
   }
+  const clearance = new Map<string, number>();
+  const ceilingAt = (x: number, z: number) => {
+    const key = `${x},${z}`;
+    const cached = clearance.get(key);
+    if (cached !== undefined) return cached;
+    const road = land.roadAt(x, z, true);
+    const value = road.distance < 15 ? road.y - 0.18 : Infinity;
+    clearance.set(key, value);
+    return value;
+  };
+  const vertexSamples = new Map<
+    string,
+    { height: number; road: ReturnType<Landscape["roadAt"]> }
+  >();
   const terrainTiles: T.Mesh[] = [];
   for (const key of occupied) {
     const [tx, tz] = key.split(",").map(Number);
@@ -49,8 +90,15 @@ export function addTerrain(
         const x = tx * tileSize + ix * size,
           z = tz * tileSize + iz * size;
         const water = land.isWater(x, z);
-        const road = land.roadAt(x, z);
-        let height = land.heightAt(x, z);
+        const sampleKey = `${x},${z}`;
+        let sample = vertexSamples.get(sampleKey);
+        if (!sample) {
+          const road = land.roadAt(x, z);
+          sample = { road, height: land.heightAt(x, z, road) };
+          vertexSamples.set(sampleKey, sample);
+        }
+        const road = sample.road;
+        let height = sample.height;
         if (water) height = (land.region === "paris" ? 26 : -2.5) - 1;
         positions.push(x, height, z);
         const rocky = land.region === "alpine" && road.y > 1550;
@@ -96,8 +144,7 @@ export function addTerrain(
               (sum, v, i) => sum + positions[v * 3 + 2] * t[i],
               0,
             );
-            const road = land.roadAt(x, z);
-            if (road.distance < 15) ceiling = Math.min(ceiling, road.y - 0.18);
+            ceiling = Math.min(ceiling, ceilingAt(x, z));
           }
           if (Number.isFinite(ceiling))
             for (const v of triangle)
@@ -123,7 +170,6 @@ export function addTerrain(
     geometry.addGroup(0, indices.length, 0);
     if (pavingIndices.length)
       geometry.addGroup(indices.length, pavingIndices.length, 1);
-    geometry.computeVertexNormals();
     const mesh = new T.Mesh(
       geometry,
       land.region === "paris"
@@ -138,19 +184,49 @@ export function addTerrain(
   }
   // Both copies of a boundary vertex use the same lowered height; this prevents
   // cracks when a neighbouring tile includes a different road-crossing triangle.
+  const boundary = (i: number) =>
+    i < 13 || i >= 156 || i % 13 === 0 || i % 13 === 12;
   const heights = new Map<string, number>();
   for (const tile of terrainTiles) {
     const p = tile.geometry.getAttribute("position");
     for (let i = 0; i < p.count; i++) {
+      if (!boundary(i)) continue;
       const key = `${p.getX(i)},${p.getZ(i)}`;
       heights.set(key, Math.min(heights.get(key) ?? Infinity, p.getY(i)));
     }
   }
+  const normals = new Map<string, number[]>();
   for (const tile of terrainTiles) {
     const p = tile.geometry.getAttribute("position");
-    for (let i = 0; i < p.count; i++)
-      p.setY(i, heights.get(`${p.getX(i)},${p.getZ(i)}`)!);
+    for (let i = 0; i < p.count; i++) {
+      if (boundary(i)) p.setY(i, heights.get(`${p.getX(i)},${p.getZ(i)}`)!);
+    }
     tile.geometry.computeVertexNormals();
+    const n = tile.geometry.getAttribute("normal");
+    for (let i = 0; i < p.count; i++) {
+      if (!boundary(i)) continue;
+      const key = `${p.getX(i)},${p.getZ(i)}`;
+      const sum = normals.get(key) ?? [0, 0, 0];
+      sum[0] += n.getX(i);
+      sum[1] += n.getY(i);
+      sum[2] += n.getZ(i);
+      normals.set(key, sum);
+    }
+  }
+  for (const sum of normals.values()) {
+    const length = Math.hypot(...sum) || 1;
+    sum[0] /= length;
+    sum[1] /= length;
+    sum[2] /= length;
+  }
+  for (const tile of terrainTiles) {
+    const p = tile.geometry.getAttribute("position"),
+      n = tile.geometry.getAttribute("normal");
+    for (let i = 0; i < p.count; i++) {
+      if (!boundary(i)) continue;
+      const sum = normals.get(`${p.getX(i)},${p.getZ(i)}`)!;
+      n.setXYZ(i, sum[0], sum[1], sum[2]);
+    }
   }
   return terrainTiles;
 }
@@ -546,13 +622,23 @@ export function createScenery(
   scene: T.Scene,
   route: CyclingRoute,
   renderer: T.WebGLRenderer,
+  elevation?: ElevationSampler,
+  prepared?: TerrainTileData[],
 ) {
-  const land = createLandscape(route);
+  const land = createLandscape(route, elevation);
   const materials = createWorldMaterials(renderer, land.region);
   const root = new T.Group();
   root.name = `scenery-${land.region}`;
   scene.add(root);
-  const tiles = addTerrain(root, route, land, materials);
+  const tiles = addTerrain(root, route, land, materials, prepared);
+  const nearTerrain =
+    land.region === "paris"
+      ? [materials.grass, materials.stone]
+      : materials.grass;
+  const farTerrain =
+    land.region === "paris"
+      ? [materials.grassFar, materials.stone]
+      : materials.grassFar;
   const groundAt = terrainSampler(tiles, land.heightAt);
   for (const item of land.items) item.y = groundAt(item.x, item.z);
   for (const landmark of land.landmarks) {
@@ -584,10 +670,18 @@ export function createScenery(
     region: land.region,
     update(dt: number, x: number, z: number) {
       materials.update(dt);
-      for (const child of culled)
-        child.visible =
-          Math.hypot(child.userData.centerX - x, child.userData.centerZ - z) <
-          1050;
+      for (const child of culled) {
+        const dx = child.userData.centerX - x,
+          dz = child.userData.centerZ - z;
+        child.visible = dx * dx + dz * dz < 1050 * 1050;
+      }
+      for (const tile of tiles) {
+        const dx = tile.userData.centerX - x,
+          dz = tile.userData.centerZ - z;
+        const distance2 = dx * dx + dz * dz;
+        if (distance2 > 450 * 450) tile.material = farTerrain;
+        else if (distance2 < 350 * 350) tile.material = nearTerrain;
+      }
     },
     dispose() {
       materials.dispose();

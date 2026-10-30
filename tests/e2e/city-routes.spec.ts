@@ -21,8 +21,9 @@ for (const [city, title, name] of [
     page.on("pageerror", (error) => errors.push(error.message));
     page.on("console", (message) => {
       if (
-        message.type() === "error" &&
-        /THREE|shader|WebGL/i.test(message.text())
+        (message.type() === "error" &&
+          /THREE|shader|WebGL/i.test(message.text())) ||
+        (message.type() === "warning" && /THREE|shader/i.test(message.text()))
       )
         errors.push(message.text());
     });
@@ -46,6 +47,10 @@ for (const [city, title, name] of [
         : city === "marseille"
           ? "mediterranean"
           : "paris",
+    );
+    await expect(page.locator("canvas")).toHaveAttribute(
+      "data-terrain-generation",
+      "worker",
     );
     await expect
       .poll(() =>
@@ -79,6 +84,13 @@ test("missing textures fall back and scenery survives repeated ride entry", asyn
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "Worker", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+  await page.route("**/routes/*.terrain.json", (route) => route.abort());
   await page.route("**/world/*.webp", (route) => route.abort());
   await page.goto("/ride/");
   await page
@@ -89,6 +101,10 @@ test("missing textures fall back and scenery survives repeated ride entry", asyn
     await expect(page.locator("canvas")).toHaveAttribute(
       "data-scenery",
       "mediterranean",
+    );
+    await expect(page.locator("canvas")).toHaveAttribute(
+      "data-terrain-generation",
+      "synchronous",
     );
     await page.getByRole("button", { name: "Finish", exact: true }).click();
     await page.getByRole("button", { name: "Back to setup" }).click();

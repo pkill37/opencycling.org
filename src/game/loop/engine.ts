@@ -157,14 +157,16 @@ export class RideEngine {
     const braking = this.config.automaticBraking && free.speed > target;
     const mass = this.config.riderMassKg + this.config.bikeMassKg;
     // Cut propulsion while braking. Brake force is bounded, never teleport speed.
-    const coast = stepPhysics(
-      s.speedMetersPerSecond,
-      0,
-      p.gradient,
-      dt,
-      this.config,
-      p.heading,
-    );
+    const coast = braking
+      ? stepPhysics(
+          s.speedMetersPerSecond,
+          0,
+          p.gradient,
+          dt,
+          this.config,
+          p.heading,
+        )
+      : free;
     const force = braking
       ? mass *
         Math.min(

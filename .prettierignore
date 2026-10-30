@@ -8,3 +8,5 @@ playwright-report/
 *.tsbuildinfo
 README.md
 PRD.md
+
+public/world/terrain-worker.js

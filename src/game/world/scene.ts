@@ -1,3 +1,5 @@
+import type { TerrainTileData } from "./terrain-data";
+import type { ElevationSampler } from "../route/terrain";
 import * as T from "three";
 import { lookupRoute } from "../route/route";
 import type { CyclingRoute } from "../../types";
@@ -164,6 +166,8 @@ export function createWorld(
   engine: RideEngine,
   getZombies?: () => ZombiesSnapshot,
   getResting?: () => boolean,
+  elevation?: ElevationSampler,
+  prepared?: TerrainTileData[],
 ) {
   const route = engine.course;
   const scene = new T.Scene();
@@ -203,12 +207,15 @@ export function createWorld(
   sun.shadow.normalBias = 0.04;
   sun.shadow.bias = -0.0002;
   scene.add(sun, sun.target);
-  const scenery = createScenery(scene, route, renderer);
+  const scenery = createScenery(scene, route, renderer, elevation, prepared);
   if (scenery.region === "alpine") {
     camera.far = 8000;
     camera.updateProjectionMatrix();
   }
   renderer.domElement.dataset.scenery = scenery.region;
+  renderer.domElement.dataset.terrainGeneration = prepared
+    ? "worker"
+    : "synchronous";
   scene.add(
     ribbon(route, 8.3, 0, -0.03, 0xd2cabb, scenery.materials.gravel),
     ribbon(route, 6.8, 0, 0.02, 0x747777, scenery.materials.road),

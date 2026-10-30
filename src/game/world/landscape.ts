@@ -1,3 +1,5 @@
+import { terrainRelief } from "./noise";
+import type { ElevationSampler } from "../route/terrain";
 import type { CyclingRoute } from "../../types";
 import { projectGeographic } from "../route/package";
 import { lookupRoute } from "../route/route";
@@ -70,7 +72,10 @@ export function insidePolygon(p: Position, polygon: Position[]) {
 }
 
 // Geographic anchors are illustrative outlines, not surveyed shoreline/footprint data.
-export function createLandscape(route: CyclingRoute) {
+export function createLandscape(
+  route: CyclingRoute,
+  elevation?: ElevationSampler,
+) {
   const region = regionForRoute(route);
   const start = route.points[0];
   const origin = {
@@ -191,7 +196,22 @@ export function createLandscape(route: CyclingRoute) {
     candidateCache.set(key, result);
     return result;
   };
-  const roadAt = (x: number, z: number) => {
+  const segments = route.points.slice(0, -1).map((a, i) => {
+    const b = route.points[i + 1],
+      dx = b.x - a.x,
+      dz = b.z - a.z;
+    const length2 = dx * dx + dz * dz;
+    return {
+      a,
+      dx,
+      dz,
+      dy: b.y - a.y,
+      length2,
+      length: Math.sqrt(length2),
+      heading: Math.atan2(dx, dz),
+    };
+  });
+  const roadAt = (x: number, z: number, clearanceOnly = false) => {
     let distance = Infinity,
       y = start.y,
       heading = 0,
@@ -199,30 +219,38 @@ export function createLandscape(route: CyclingRoute) {
       weights = 0;
     let nearbyDeck = Infinity;
     for (const i of nearby(x, z)) {
-      const a = route.points[i],
-        b = route.points[i + 1];
-      const dx = b.x - a.x,
-        dz = b.z - a.z;
-      const length2 = dx * dx + dz * dz;
+      const {
+        a,
+        dx,
+        dz,
+        dy,
+        length2,
+        length,
+        heading: segmentHeading,
+      } = segments[i];
       if (length2 === 0) continue;
       const t = Math.max(
         0,
         Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / length2),
       );
-      const d = Math.hypot(x - a.x - t * dx, z - a.z - t * dz);
-      const height = a.y + t * (b.y - a.y);
-      const weight = Math.sqrt(length2) / (1 + d ** 4);
-      weightedY += height * weight;
-      weights += weight;
-      if (d < 6) nearbyDeck = Math.min(nearbyDeck, height);
+      const ex = x - a.x - t * dx,
+        ez = z - a.z - t * dz;
+      const d = ex * ex + ez * ez;
+      const height = a.y + t * dy;
+      if (!clearanceOnly) {
+        const weight = length / (1 + d * d);
+        weightedY += height * weight;
+        weights += weight;
+      }
+      if (d < 36) nearbyDeck = Math.min(nearbyDeck, height);
       if (d < distance) {
         distance = d;
         y = height;
-        heading = Math.atan2(dx, dz);
+        heading = segmentHeading;
       }
     }
     return {
-      distance,
+      distance: Math.sqrt(distance),
       y,
       heading,
       blendedY: weights ? weightedY / weights : start.y,
@@ -233,15 +261,33 @@ export function createLandscape(route: CyclingRoute) {
     water.some((polygon) => insidePolygon({ x, z }, polygon));
   const isGarden = (x: number, z: number) =>
     gardens.some((polygon) => insidePolygon({ x, z }, polygon));
-  const heightAt = (x: number, z: number) => {
-    const road = roadAt(x, z);
+  const anchors = route.points.filter(
+    (_, i) => i % Math.max(1, Math.ceil(route.points.length / 128)) === 0,
+  );
+  const heightAt = (x: number, z: number, road = roadAt(x, z)) => {
+    const measured = elevation?.(x, z);
+    if (measured !== undefined && road.distance >= 40) return measured;
     const relief =
       region === "alpine" ? 12 : region === "mediterranean" ? 3 : 0.5;
-    const ripple =
-      (Math.sin(x / 93) * Math.cos(z / 117) + 0.3 * Math.sin((x + z) / 37)) *
-      relief;
+    const ripple = terrainRelief(x, z) * relief;
     const blend = Math.min(1, Math.max(0, (road.distance - 6) / 100));
-    const y = road.blendedY - 0.14 + ripple * blend;
+    let sum = 0,
+      weights = 0;
+    for (const anchor of anchors) {
+      const weight = 1 / (100 + (x - anchor.x) ** 2 + (z - anchor.z) ** 2);
+      sum += anchor.y * weight;
+      weights += weight;
+    }
+    const farHeight = weights ? sum / weights : start.y;
+    const local = Math.max(0, 1 - road.distance / 250);
+    const base = farHeight * (1 - local) + road.blendedY * local;
+    const procedural = base - 0.14 + ripple * blend;
+    const transition = Math.min(1, Math.max(0, (road.distance - 6) / 34));
+    const smooth = transition * transition * (3 - 2 * transition);
+    const y =
+      measured === undefined
+        ? procedural
+        : procedural * (1 - smooth) + measured * smooth;
     return Math.min(y, road.nearbyDeck - 0.12);
   };
   const landmarks: Landmark[] = [];

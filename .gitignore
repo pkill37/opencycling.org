@@ -7,3 +7,5 @@ test-results/
 certificates/
 .env*
 !.env.example
+
+public/world/terrain-worker.js

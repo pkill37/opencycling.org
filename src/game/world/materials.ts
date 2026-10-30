@@ -62,6 +62,29 @@ export function createWorldMaterials(
     roughness: 1,
     side: T.DoubleSide,
   });
+  // Seeded fine relief keeps surfaces detailed without additional downloads.
+  const reliefCanvas = document.createElement("canvas");
+  reliefCanvas.width = reliefCanvas.height = 128;
+  const reliefContext = reliefCanvas.getContext("2d");
+  if (reliefContext) {
+    const pixels = reliefContext.createImageData(128, 128);
+    let seed = 1947;
+    for (let i = 0; i < pixels.data.length; i += 4) {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      const value = 90 + (seed % 76);
+      pixels.data[i] = pixels.data[i + 1] = pixels.data[i + 2] = value;
+      pixels.data[i + 3] = 255;
+    }
+    reliefContext.putImageData(pixels, 0, 0);
+    const bump = new T.CanvasTexture(reliefCanvas);
+    bump.wrapS = bump.wrapT = T.RepeatWrapping;
+    bump.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    textures.add(bump);
+    for (const material of [road, gravel, grass]) {
+      material.bumpMap = bump;
+      material.bumpScale = material === road ? 0.025 : 0.12;
+    }
+  }
   load("road", road);
   load("gravel", gravel);
   load("grass", grass);
@@ -122,6 +145,75 @@ export function createWorldMaterials(
     color: region === "mediterranean" ? 0xc7bda4 : 0x97998d,
     roughness: 1,
   });
+  grass.onBeforeCompile = (shader) => {
+    // Triplanar sampling uses terrainPosition instead of vMapUv. Disable only
+    // the vertex map UV output; the fragment shader still needs USE_MAP, and
+    // bump-map UVs remain enabled independently through USE_BUMPMAP.
+    shader.vertexShader =
+      `#undef USE_MAP\nvarying vec3 terrainPosition; varying vec3 terrainNormal;\n${shader.vertexShader}`.replace(
+        "#include <begin_vertex>",
+        "#include <begin_vertex>\nterrainPosition = position; terrainNormal = normal;",
+      );
+    shader.fragmentShader =
+      `varying vec3 terrainPosition; varying vec3 terrainNormal;
+float surfaceHash(vec3 p) {
+  p = fract(p * 0.1031);
+  p += dot(p, p.yzx + 33.33);
+  return fract((p.x + p.y) * p.z);
+}
+float surfaceNoise(vec3 p) {
+  vec3 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(surfaceHash(i), surfaceHash(i+vec3(1,0,0)), f.x),
+                 mix(surfaceHash(i+vec3(0,1,0)), surfaceHash(i+vec3(1,1,0)), f.x), f.y),
+             mix(mix(surfaceHash(i+vec3(0,0,1)), surfaceHash(i+vec3(1,0,1)), f.x),
+                 mix(surfaceHash(i+vec3(0,1,1)), surfaceHash(i+vec3(1,1,1)), f.x), f.y), f.z);
+}
+${shader.fragmentShader}`.replace(
+        "#include <map_fragment>",
+        `#ifdef USE_MAP
+      vec3 weights = pow(abs(normalize(terrainNormal)), vec3(4.0));
+      weights /= max(dot(weights, vec3(1.0)), 0.0001);
+      vec3 p = terrainPosition / 10.0;
+      vec4 surfaceMap;
+      if (weights.y > 0.995) {
+        surfaceMap = texture2D(map, p.xz);
+      } else {
+        surfaceMap = texture2D(map, p.yz) * weights.x
+          + texture2D(map, p.xz) * weights.y
+          + texture2D(map, p.xy) * weights.z;
+      }
+      diffuseColor *= surfaceMap;
+      #endif
+      float slope = 1.0 - abs(normalize(terrainNormal).y);
+      float broad = surfaceNoise(terrainPosition * 0.018) * 2.0 - 1.0;
+      float detailFade = 1.0 - smoothstep(0.15, 0.65, length(fwidth(terrainPosition)));
+      float grain = (surfaceNoise(terrainPosition * 3.0) - 0.5) * 0.16 * detailFade;
+      float strata = surfaceNoise(terrainPosition * vec3(0.13, 0.9, 0.13));
+      float stone = smoothstep(0.12, 0.48, slope);
+      ${region === "alpine" ? "stone = max(stone, smoothstep(1450.0, 2100.0, terrainPosition.y) * 0.75);" : ""}
+      vec3 rockTone = vec3(0.43, 0.42, 0.37) * (0.85 + grain + strata * 0.3 + broad * 0.12);
+      vec3 soilTone = vec3(0.38, 0.30, 0.20);
+      diffuseColor.rgb = mix(diffuseColor.rgb * (1.0 + broad * 0.12), soilTone, smoothstep(0.3, 0.9, broad) * 0.22);
+      diffuseColor.rgb = mix(diffuseColor.rgb, rockTone, stone);`,
+      );
+  };
+  const grassFar = grass.clone();
+  grassFar.bumpMap = null;
+  materials.add(grassFar);
+  grassFar.onBeforeCompile = (shader, context) => {
+    grass.onBeforeCompile(shader, context);
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "float grain = (surfaceNoise(terrainPosition * 3.0) - 0.5) * 0.16 * detailFade;",
+        "float grain = 0.0;",
+      )
+      .replace(
+        "float strata = surfaceNoise(terrainPosition * vec3(0.13, 0.9, 0.13));",
+        "float strata = 0.5;",
+      );
+  };
+  grassFar.customProgramCacheKey = () => "terrain-distant-v1";
   const water = standard({
     color: region === "paris" ? 0x476d68 : 0x228d9e,
     roughness: 0.28,
@@ -147,6 +239,7 @@ export function createWorldMaterials(
     road,
     gravel,
     grass,
+    grassFar,
     pine,
     broadleaf,
     facade,
@@ -156,6 +249,10 @@ export function createWorldMaterials(
     rock,
     water,
     update(dt: number) {
+      if (grassFar.map !== grass.map) {
+        grassFar.map = grass.map;
+        grassFar.needsUpdate = true;
+      }
       time.value += Math.max(0, dt);
     },
     owns(resource: T.Material | T.Texture) {

@@ -22,6 +22,7 @@ export default defineConfig([
   },
   globalIgnores([
     ".next/**",
+    "public/world/terrain-worker.js",
     "out/**",
     "next-env.d.ts",
     "test-results/**",

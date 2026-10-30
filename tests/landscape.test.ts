@@ -1,3 +1,4 @@
+import { terrainSampler as sampleElevation } from "../src/game/route/terrain";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -94,9 +95,13 @@ test("imported route names do not choose a regional profile", () => {
 for (const id of ["alpe-d-huez", "marseille", "paris"])
   test(`${id}: terrain seams and prop heights match rendered road clearance`, () => {
     const route = course(id);
+    const elevation = sampleElevation(
+      JSON.parse(readFileSync(`public/routes/${id}.terrain.json`, "utf8")),
+      route,
+    );
     const root = new T.Group();
     const material = new T.MeshStandardMaterial();
-    const tiles = addTerrain(root, route, createLandscape(route), {
+    const tiles = addTerrain(root, route, createLandscape(route, elevation), {
       grass: material,
       stone: material,
     } as WorldMaterials);
@@ -106,12 +111,17 @@ for (const id of ["alpe-d-huez", "marseille", "paris"])
       gravel: material,
     } as WorldMaterials);
     const vertices = new Map<string, number>();
+    const normals = new Map<string, number[]>();
     for (const tile of tiles) {
       const p = tile.geometry.getAttribute("position");
       for (let i = 0; i < p.count; i++) {
         const key = `${p.getX(i)},${p.getZ(i)}`;
         if (vertices.has(key)) assert.equal(p.getY(i), vertices.get(key));
         vertices.set(key, p.getY(i));
+        const n = tile.geometry.getAttribute("normal");
+        const normal = [n.getX(i), n.getY(i), n.getZ(i)];
+        if (normals.has(key)) assert.deepEqual(normal, normals.get(key));
+        normals.set(key, normal);
       }
     }
     // Raycast the actual rendered triangles, not just the height function.

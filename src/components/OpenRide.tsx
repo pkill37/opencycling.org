@@ -254,8 +254,18 @@ function LoadedOpenRide({
     let view: typeof world.current = null;
     if (!host.current || !worldActive) return;
     const element = host.current;
+    const preparation = new AbortController();
     import("@/game/world/scene")
-      .then(({ createWorld }) => {
+      .then(async ({ createWorld }) => {
+        const { loadTerrain } = await import("@/game/route/terrain");
+        const elevation = await loadTerrain(e.course);
+        if (stopped) return;
+        const { prepareTerrain } = await import("@/game/world/prepare-terrain");
+        const prepared = await prepareTerrain(
+          e.course,
+          elevation,
+          preparation.signal,
+        );
         if (stopped) return;
         try {
           view = createWorld(
@@ -263,6 +273,8 @@ function LoadedOpenRide({
             e,
             () => zombiesSnapshot.current,
             () => showingSummary.current,
+            elevation,
+            prepared,
           );
           world.current = view;
           setWorldLoading(false);
@@ -332,6 +344,7 @@ function LoadedOpenRide({
     document.addEventListener("visibilitychange", visibility);
     return () => {
       stopped = true;
+      preparation.abort();
       cancelAnimationFrame(frame);
       document.removeEventListener("visibilitychange", visibility);
       view?.dispose();
@@ -480,6 +493,18 @@ function LoadedOpenRide({
                 </a>
               )}
 
+              {["alpe-d-huez-test", "paris", "marseille"].includes(
+                route.id,
+              ) && (
+                <p>
+                  <a href="https://registry.opendata.aws/terrain-tiles/">
+                    Terrain: Mapzen
+                  </a>{" "}
+                  · SRTM courtesy of USGS · Produced using Copernicus data and
+                  information funded by the European Union — EU-DEM layers.
+                  Surrounding terrain only; road elevations unchanged.
+                </p>
+              )}
               {routeLoading && <p role="status">Loading route…</p>}
               {routeError && <p role="alert">{routeError}</p>}
 
