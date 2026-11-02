@@ -341,7 +341,10 @@ If implemented, heart rate must be isolated as a generic sensor source and must 
 
 ### 5.5 Trainer Control Scope
 
-The strict MVP must first implement read-only trainer telemetry.
+Read-only telemetry remains the default. FTMS resistance control is available
+only after the rider explicitly enables **Control trainer resistance** during
+setup and confirms the consent prompt. CPS-only devices, simulator mode and
+FTMS devices without a supported control path never receive control writes.
 
 Required:
 
@@ -352,21 +355,51 @@ parse power/cadence/speed
 feed telemetry into ride engine
 ```
 
-Optional after read-only telemetry works:
+Implemented FTMS control behavior:
 
 ```text
-write FTMS control point
-request control
-start/resume trainer session
-stop/pause trainer session
-set target resistance
-set simulation parameters
-map route gradient to trainer resistance
+request control before the first hardware command
+prefer Indoor Bike Simulation Parameters when supported
+fall back to Target Resistance Level when simulation control is rejected
+clamp target resistance to the advertised Supported Resistance Level Range
+serialize acknowledged writes and wait for a Control Point indication
+time out and cancel pending commands when the connection changes
+stop/reset control on pause, finish, disconnect or cleanup
 ```
 
-Do not block the MVP on trainer resistance control. Reading real power from the trainer is the mandatory proof.
+The relevant FTMS characteristics are:
 
-If trainer control is attempted, isolate it behind capability checks because not every trainer exposes the same write/control features.
+```text
+Fitness Machine Feature                  0x2ACC
+Supported Resistance Level Range         0x2AD6
+Fitness Machine Control Point            0x2AD9
+Fitness Machine Status                   0x2ADA
+```
+
+The Fitness Machine Feature characteristic contains a four-byte Fitness
+Machine Features field followed by a four-byte Target Setting Features field.
+OpenCycling.org uses Resistance Target Setting Supported (target bit 2) and
+Indoor Bike Simulation Parameters Supported (target bit 13) to expose control
+capabilities. The control point uses Request Control (`0x00`), Set Target
+Resistance Level (`0x04`, `SINT16` in 0.1 resistance units), Set Indoor Bike
+Simulation Parameters (`0x11`) and Stop (`0x08`, parameter `0x01`) for cleanup.
+
+Simulation parameters contain signed wind speed, route grade, rolling
+resistance and wind resistance coefficient. Route gradient is also retained by
+the deterministic virtual physics engine; hardware resistance is only a
+control output and never becomes authoritative for route progression.
+
+If a command is rejected, times out, loses control permission or the trainer
+disconnects, OpenCycling.org stops issuing control writes, shows a non-blocking
+warning and continues with virtual resistance. A rejected simulation command
+uses target-resistance fallback once when that capability is available; a
+rejected fallback disables hardware control for the remainder of the session.
+
+Control implementation is isolated behind the trainer source boundary. The
+ride engine publishes desired control state; it does not access Bluetooth GATT
+characteristics directly. See the [canonical trainer types](src/bluetooth/types.ts),
+[FTMS control encoder](src/bluetooth/ftms-control.ts), and
+[hardware compatibility checklist](docs/COMPATIBILITY.md).
 
 ### 5.6 Connection UX
 
