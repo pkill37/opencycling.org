@@ -2,7 +2,7 @@
 
 Status: Draft for review  
 Date: 2026-10-16  
-Product: OpenRide
+Product: OpenCycling.org
 
 ## 1. Product decision
 
@@ -359,4 +359,4 @@ Publishing a curated route requires documented tolerances, measured outcomes, an
 
 ## 14. Definition of success
 
-OpenRide can load three documented real-world courses and simulate repeatable power-driven rides whose geometry, gradients, and dynamics are supported by validated data and explicit assumptions. A reusable route-building workflow can turn additional GPX courses into the same runtime format. Simple visuals faithfully explain the course without changing or disguising its physical model.
+OpenCycling.org can load three documented real-world courses and simulate repeatable power-driven rides whose geometry, gradients, and dynamics are supported by validated data and explicit assumptions. A reusable route-building workflow can turn additional GPX courses into the same runtime format. Simple visuals faithfully explain the course without changing or disguising its physical model.

@@ -1,5 +1,9 @@
 # Geographic route pipeline
 
+## Virtual gradient and optional trainer resistance
+
+Route gradients always feed OpenCycling.org's deterministic virtual physics. An FTMS trainer may optionally receive the same route grade after the rider explicitly enables control; simulation parameters are preferred and target resistance is used only when necessary. Hardware control is never required for route progression, and a rejected or disconnected command falls back to virtual resistance without stopping the ride.
+
 ## Delivery status
 
 Candidate GPX/KML sources have now been located and inspected; see the

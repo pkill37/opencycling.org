@@ -4,13 +4,28 @@ import type {
   TrainerSource,
   TrainerConnectionState,
   TrainerTelemetrySample,
+  TrainerControlCapabilities,
+  TrainerControlSource,
+  SimulationParameters,
 } from "../types";
+import {
+  clampResistance,
+  controlFailure,
+  encodeRequestControl,
+  encodeSetSimulationParameters,
+  encodeSetTargetResistance,
+  parseControlResponse,
+  parseTrainerControlCapabilities,
+  parseResistanceRange,
+} from "../ftms-control";
 import { parseIndoorBikeData } from "../parsers/parse-indoor-bike-data";
 import {
   parseCyclingPowerMeasurement,
   type CrankSample,
 } from "../parsers/parse-cycling-power-measurement";
-export class BluetoothTrainerSource implements TrainerSource {
+export class BluetoothTrainerSource
+  implements TrainerSource, TrainerControlSource
+{
   readonly id = "bluetooth";
   label = "Smart trainer";
   kind: "bluetooth-ftms" | "bluetooth-cps" = "bluetooth-ftms";
@@ -20,6 +35,12 @@ export class BluetoothTrainerSource implements TrainerSource {
   features: string[] = [];
   diagnostics: string[] = [];
   last?: TrainerTelemetrySample;
+  controlCapabilities: TrainerControlCapabilities = {
+    supported: false,
+    supportsSimulationParameters: false,
+    supportsResistanceLevel: false,
+  };
+  controlStatusMessage = "";
   private device?: BluetoothDevice;
   private chars: BluetoothRemoteGATTCharacteristic[] = [];
   private callbacks = new Set<(s: TrainerTelemetrySample) => void>();
@@ -29,6 +50,12 @@ export class BluetoothTrainerSource implements TrainerSource {
   >();
   private generation = 0;
   private changeCallbacks = new Set<() => void>();
+  private controlPoint?: BluetoothRemoteGATTCharacteristic;
+  private statusCharacteristic?: BluetoothRemoteGATTCharacteristic;
+  private statusListener?: EventListener;
+  private controlQueue = Promise.resolve();
+  private controlEnabled = false;
+  private pendingControlCancellations = new Set<() => void>();
   subscribeChanges(callback: () => void) {
     this.changeCallbacks.add(callback);
     return () => {
@@ -66,10 +93,27 @@ export class BluetoothTrainerSource implements TrainerSource {
     this.setState("disconnected");
   };
   private cleanup() {
+    for (const cancel of this.pendingControlCancellations) cancel();
+    this.pendingControlCancellations.clear();
     for (const [char, listener] of this.listeners)
       char.removeEventListener("characteristicvaluechanged", listener);
     this.listeners.clear();
+    if (this.statusCharacteristic && this.statusListener)
+      this.statusCharacteristic.removeEventListener(
+        "characteristicvaluechanged",
+        this.statusListener,
+      );
+    this.statusCharacteristic = undefined;
+    this.statusListener = undefined;
     this.chars = [];
+    this.controlPoint = undefined;
+    this.controlEnabled = false;
+    this.controlStatusMessage = "";
+    this.controlCapabilities = {
+      supported: false,
+      supportsSimulationParameters: false,
+      supportsResistanceLevel: false,
+    };
   }
   async disconnect() {
     this.generation++;
@@ -77,6 +121,104 @@ export class BluetoothTrainerSource implements TrainerSource {
     this.device?.removeEventListener("gattserverdisconnected", this.lost);
     this.device?.gatt?.disconnect();
     this.setState("disconnected");
+  }
+  async requestControl() {
+    if (!this.controlCapabilities.supported || !this.controlPoint)
+      throw new Error("Trainer control is unavailable.");
+    await this.sendControl(encodeRequestControl(), 0x00);
+    this.controlEnabled = true;
+  }
+  async setSimulationParameters(parameters: SimulationParameters) {
+    if (
+      !this.controlEnabled ||
+      !this.controlCapabilities.supportsSimulationParameters
+    )
+      throw new Error("Simulation-grade control is unavailable.");
+    await this.sendControl(encodeSetSimulationParameters(parameters), 0x11);
+  }
+  async setTargetResistance(level: number) {
+    if (
+      !this.controlEnabled ||
+      !this.controlCapabilities.supportsResistanceLevel
+    )
+      throw new Error("Resistance-level control is unavailable.");
+    await this.sendControl(
+      encodeSetTargetResistance(
+        clampResistance(level, this.controlCapabilities),
+      ),
+      0x04,
+    );
+  }
+  async releaseControl() {
+    this.controlEnabled = false;
+    if (!this.controlPoint) return;
+    try {
+      await this.sendControl(Uint8Array.of(0x08, 0x01), 0x08);
+    } catch (error) {
+      this.log(`Control cleanup failed: ${bluetoothError(error)}`);
+    }
+  }
+  private sendControl(payload: Uint8Array, request: number) {
+    const generation = this.generation;
+    const run = async () => {
+      if (generation !== this.generation || !this.controlPoint)
+        throw new Error("Trainer connection changed during control command.");
+      const characteristic = this.controlPoint;
+      const response = new Promise<void>((resolve, reject) => {
+        let settled = false;
+        const cleanupResponse = () => {
+          characteristic.removeEventListener(
+            "characteristicvaluechanged",
+            listener,
+          );
+          clearTimeout(timer);
+          this.pendingControlCancellations.delete(cancel);
+        };
+        const finish = (error?: Error) => {
+          if (settled) return;
+          settled = true;
+          cleanupResponse();
+          if (error) reject(error);
+          else resolve();
+        };
+        const listener: EventListener = () => {
+          try {
+            const value = characteristic.value;
+            if (!value) return;
+            const result = parseControlResponse(value);
+            if (result.request !== request) return;
+            if (result.result !== 0x01)
+              finish(new Error(controlFailure(result.result)));
+            else finish();
+          } catch (error) {
+            finish(error instanceof Error ? error : new Error(String(error)));
+          }
+        };
+        const cancel = () =>
+          finish(
+            new Error("Trainer connection changed during control command."),
+          );
+        this.pendingControlCancellations.add(cancel);
+        characteristic.addEventListener("characteristicvaluechanged", listener);
+        const timer = setTimeout(
+          () =>
+            finish(new Error("Timed out waiting for FTMS control response.")),
+          5000,
+        );
+        const bytes = payload.buffer.slice(
+          payload.byteOffset,
+          payload.byteOffset + payload.byteLength,
+        ) as ArrayBuffer;
+        void characteristic.writeValueWithResponse(bytes).catch((error) => {
+          finish(error instanceof Error ? error : new Error(String(error)));
+        });
+      });
+      await response;
+      this.log(`FTMS control command 0x${request.toString(16)} accepted.`);
+    };
+    const next = this.controlQueue.then(run, run);
+    this.controlQueue = next.catch(() => {});
+    return next;
   }
   async connect(debug = false, preferCps = false, reconnect = false) {
     const available = bluetoothAvailability();
@@ -161,6 +303,15 @@ export class BluetoothTrainerSource implements TrainerSource {
                 .map((x) => x.toString(16).padStart(2, "0"))
                 .join(" ")}`,
             );
+            if (ftms && feature.byteLength >= 8) {
+              const featureView = new DataView(
+                feature.buffer,
+                feature.byteOffset,
+                feature.byteLength,
+              );
+              this.controlCapabilities =
+                parseTrainerControlCapabilities(featureView);
+            }
             this.log(`Read ${protocol.toUpperCase()} feature bytes.`);
           } catch {
             this.features.push(
@@ -241,6 +392,74 @@ export class BluetoothTrainerSource implements TrainerSource {
           else if (!this.chars.some((c) => c.uuid === U.INDOOR_BIKE_DATA))
             this.kind = "bluetooth-cps";
           this.log(`${protocol.toUpperCase()} notifications active.`);
+          if (ftms) {
+            try {
+              this.controlPoint = await service.getCharacteristic(
+                U.FITNESS_MACHINE_CONTROL_POINT,
+              );
+              await this.controlPoint.startNotifications();
+              this.log("FTMS control point discovered and subscribed.");
+              try {
+                this.statusCharacteristic = await service.getCharacteristic(
+                  U.FITNESS_MACHINE_STATUS,
+                );
+                this.statusListener = () => {
+                  const value = this.statusCharacteristic?.value;
+                  if (!value || value.byteLength < 1) return;
+                  // 0xFF is Control Permission Lost in FTMS 1.0.1.
+                  if (value.getUint8(0) === 0xff) {
+                    this.controlEnabled = false;
+                    this.controlCapabilities = {
+                      ...this.controlCapabilities,
+                      supported: false,
+                    };
+                    this.controlStatusMessage =
+                      "Trainer control permission was lost; using virtual resistance only.";
+                    this.log(this.controlStatusMessage);
+                  }
+                };
+                this.statusCharacteristic.addEventListener(
+                  "characteristicvaluechanged",
+                  this.statusListener,
+                );
+                await this.statusCharacteristic.startNotifications();
+              } catch {
+                if (this.statusCharacteristic && this.statusListener)
+                  this.statusCharacteristic.removeEventListener(
+                    "characteristicvaluechanged",
+                    this.statusListener,
+                  );
+                this.statusCharacteristic = undefined;
+                this.statusListener = undefined;
+                this.log("FTMS status notifications unavailable.");
+              }
+              if (this.controlCapabilities.supportsResistanceLevel) {
+                try {
+                  const range = await service.getCharacteristic(
+                    U.SUPPORTED_RESISTANCE_LEVEL_RANGE,
+                  );
+                  this.controlCapabilities = {
+                    ...this.controlCapabilities,
+                    resistanceRange: parseResistanceRange(
+                      await range.readValue(),
+                    ),
+                  };
+                } catch {
+                  this.log(
+                    "Resistance range unavailable; using safe default range.",
+                  );
+                }
+              }
+            } catch (error) {
+              this.controlPoint = undefined;
+              this.controlCapabilities = {
+                supported: false,
+                supportsSimulationParameters: false,
+                supportsResistanceLevel: false,
+              };
+              this.log(`FTMS control unavailable: ${bluetoothError(error)}`);
+            }
+          }
         } catch (error) {
           if (characteristic && listener) {
             characteristic.removeEventListener(

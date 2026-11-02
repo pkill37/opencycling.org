@@ -2,7 +2,7 @@
 
 Checked 2026-10-16. All four direct data URLs below returned HTTP 200 and were
 inspected. These are source candidates, not validated runtime packages. The GPX
-files were also parsed with OpenRide's actual importer in memory.
+files were also parsed with OpenCycling.org's actual importer in memory.
 
 Distances below are computed horizontal great-circle polyline lengths using
 Earth radius 6,371,008.8 m, rounded for reporting. They are not independently

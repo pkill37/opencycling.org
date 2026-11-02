@@ -19,6 +19,7 @@ import { ZombiesMode, noZombies } from "@/game/modes/zombies";
 import { SimulatorSource } from "@/bluetooth/sources/simulator-source";
 import { BluetoothTrainerSource } from "@/bluetooth/sources/bluetooth-trainer-source";
 import { bluetoothAvailability } from "@/bluetooth/availability";
+import { requestScreenWakeLock } from "@/lib/wake-lock";
 import type { CyclingRoute, RideSummary, RiderState } from "@/types";
 import styles from "./OpenRide.module.css";
 const time = (seconds: number) =>
@@ -170,6 +171,8 @@ function LoadedOpenRide({
     [warning, setWarning] = useState(""),
     [debugScan, setDebugScan] = useState(false),
     [cps, setCps] = useState(false),
+    [controlResistance, setControlResistance] = useState(false),
+    [controlActive, setControlActive] = useState(false),
     [zombies, setZombies] = useState(noZombies),
     [summaryReason, setSummaryReason] = useState<
       "finished" | "caught" | "ended"
@@ -201,10 +204,28 @@ function LoadedOpenRide({
     setSetup(true);
     void trainer.connect(debugScan, cps, reconnect);
   };
-  const start = () => {
+  const start = async () => {
+    let hardwareControl = false;
+    let controlWarning = "";
+    if (controlResistance && source === "bluetooth") {
+      if (
+        !window.confirm(
+          "Allow OpenCycling.org to change trainer resistance automatically with the route?",
+        )
+      )
+        return;
+      try {
+        await trainer.requestControl();
+        hardwareControl = true;
+      } catch (error) {
+        controlWarning = `Trainer control unavailable — virtual resistance only. ${error instanceof Error ? error.message : "The trainer rejected control."}`;
+      }
+    }
     activeEngine.dispose();
     const next = new RideEngine(route, { ...physics });
     next.attach(source === "simulator" ? sim : trainer);
+    next.enableTrainerControl(hardwareControl);
+    if (controlWarning) next.setControlWarning(controlWarning);
     if (source === "simulator") next.ingest(sim.sample());
     setEngine(next);
     setWorldLoading(true);
@@ -212,7 +233,8 @@ function LoadedOpenRide({
     setPaused(false);
     setCamera("Chase");
     setHud(true);
-    setWarning("");
+    setWarning(controlWarning);
+    setControlActive(hardwareControl);
     setWorldError("");
     setSummaryReason("ended");
     if (mode === "zombies") {
@@ -232,10 +254,25 @@ function LoadedOpenRide({
     setSummary(activeEngine.summary());
     setPhase("summary");
   }, [activeEngine, setPhase]);
-  const togglePause = useCallback(() => {
-    activeEngine.setPaused(!activeEngine.paused);
-    setPaused(activeEngine.paused);
-  }, [activeEngine]);
+  const togglePause = useCallback(async () => {
+    if (!activeEngine.paused) {
+      activeEngine.setPaused(true);
+      setPaused(true);
+      setControlActive(false);
+      return;
+    }
+    if (controlResistance && source === "bluetooth") {
+      try {
+        await trainer.requestControl();
+        activeEngine.enableTrainerControl(true);
+        setControlActive(true);
+      } catch {
+        setWarning("Trainer control unavailable — virtual resistance only.");
+      }
+    }
+    activeEngine.setPaused(false);
+    setPaused(false);
+  }, [activeEngine, controlResistance, source, trainer, setWarning]);
   const toggleCamera = useCallback(() => {
     world.current?.toggleCamera();
     setCamera(world.current?.cameraName() ?? "Chase");
@@ -292,7 +329,7 @@ function LoadedOpenRide({
           if (stopped) return;
           const dt = Math.min((now - last) / 1000, 0.25);
           last = now;
-          if (!document.hidden && !showingSummary.current) {
+          if (!showingSummary.current) {
             e.advance(dt);
             zombiesMode.current?.advance(dt, e.state);
           }
@@ -304,6 +341,8 @@ function LoadedOpenRide({
             setZombies(zombiesSnapshot.current);
             setPaused(e.paused);
             setWarning(e.warning);
+            if (e.warning.includes("Trainer control unavailable"))
+              setControlActive(false);
             setFps(Math.round(1 / Math.max(dt, 0.001)));
             published = now;
             if (zombiesSnapshot.current.caught) {
@@ -336,10 +375,6 @@ function LoadedOpenRide({
       });
     const visibility = () => {
       last = performance.now();
-      if (document.hidden && !showingSummary.current) {
-        e.setPaused(true);
-        setPaused(true);
-      }
     };
     document.addEventListener("visibilitychange", visibility);
     return () => {
@@ -351,6 +386,40 @@ function LoadedOpenRide({
       world.current = null;
     };
   }, [worldActive, activeEngine]);
+  useEffect(() => {
+    if (phase !== "ride") return;
+    let active = true;
+    let lock: WakeLockSentinel | undefined;
+    const acquire = async () => {
+      if (!active || document.visibilityState !== "visible" || lock) return;
+      const next = await requestScreenWakeLock();
+      if (!active) {
+        if (next) void next.release();
+        return;
+      }
+      lock = next;
+      lock?.addEventListener(
+        "release",
+        () => {
+          lock = undefined;
+          void acquire();
+        },
+        { once: true },
+      );
+    };
+    const visibility = () => {
+      if (document.visibilityState === "visible") void acquire();
+    };
+    void acquire();
+    document.addEventListener("visibilitychange", visibility);
+    return () => {
+      active = false;
+      document.removeEventListener("visibilitychange", visibility);
+      const current = lock;
+      lock = undefined;
+      if (current) void current.release();
+    };
+  }, [phase]);
   useEffect(() => {
     if (phase !== "ride") return;
     const key = (event: KeyboardEvent) => {
@@ -405,6 +474,10 @@ function LoadedOpenRide({
   const sample = trainer.last,
     canStart =
       hydrated && (source === "simulator" || trainer.state === "connected");
+  const canControl =
+    source === "bluetooth" &&
+    trainer.kind === "bluetooth-ftms" &&
+    trainer.controlCapabilities?.supported === true;
   const metric = (label: string, value: string, unit: string) => (
     <div className={styles.metric}>
       <span>{label}</span>
@@ -463,7 +536,7 @@ function LoadedOpenRide({
         <>
           <header className={styles.header}>
             <Link href="/" prefetch={false} className={styles.logo}>
-              <span>◒</span> openride
+              <span>◒</span> OpenCycling.org
             </Link>
             <span className={styles.local}>
               FREE TO PLAY · NO ACCOUNT NEEDED
@@ -586,6 +659,24 @@ function LoadedOpenRide({
                   Start ride <span>→</span>
                 </button>
               </div>
+              {canControl && (
+                <label className={styles.controlConsent}>
+                  <input
+                    type="checkbox"
+                    checked={controlResistance}
+                    onChange={(event) =>
+                      setControlResistance(event.target.checked)
+                    }
+                  />{" "}
+                  <span>
+                    <strong>Control trainer resistance</strong>
+                    <small>
+                      Optional. The trainer may change resistance automatically
+                      with the route.
+                    </small>
+                  </span>
+                </label>
+              )}
               <details className={styles.debugSettings}>
                 <summary>Debug settings</summary>
                 <div className={styles.debugGrid}>
@@ -686,6 +777,15 @@ function LoadedOpenRide({
                 distanceMeters={snapshot.distanceMeters}
               />
               <div className={styles.telemetry}>
+                {source !== "simulator" && (
+                  <div role="status" className={styles.controlStatus}>
+                    {controlActive
+                      ? "Trainer control active"
+                      : warning.includes("Trainer control")
+                        ? "Trainer control unavailable"
+                        : "Virtual resistance only"}
+                  </div>
+                )}
                 <div className={styles.power} role="group" aria-label="Power">
                   <span>POWER</span>
                   <strong>
@@ -873,7 +973,7 @@ function LoadedOpenRide({
             prefetch={false}
             onClick={() => setPhase("home")}
           >
-            ◒ openride
+            ◒ OpenCycling.org
           </Link>
           <div className={styles.eyebrow}>
             {summaryReason === "caught"

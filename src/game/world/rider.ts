@@ -79,7 +79,7 @@ function jerseyTexture() {
   ctx.fillStyle = "#f2f1e9";
   ctx.textAlign = "center";
   ctx.font = "600 13px sans-serif";
-  ctx.fillText("OPENRIDE", 128, 106);
+  ctx.fillText("OPENCYCLING.ORG", 128, 106);
   ctx.strokeStyle = "#a33d2b";
   ctx.lineWidth = 2;
   for (const x of [102, 128, 154]) ctx.strokeRect(x - 12, 167, 24, 43);

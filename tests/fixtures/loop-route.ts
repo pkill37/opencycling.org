@@ -45,6 +45,6 @@ export const route: CyclingRoute = {
     warnings: [
       "Bundled GPX routes are unverified previews; geographic accuracy awaits independent review.",
     ],
-    attribution: "OpenRide procedural fixture",
+    attribution: "OpenCycling.org procedural fixture",
   },
 };

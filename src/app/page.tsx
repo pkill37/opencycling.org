@@ -10,11 +10,11 @@ export default function Home() {
     "@context": "https://schema.org",
     "@graph": [
       ...(siteUrl
-        ? [{ "@type": "WebSite", name: "OpenRide", url: siteUrl.href }]
+        ? [{ "@type": "WebSite", name: "OpenCycling.org", url: siteUrl.href }]
         : []),
       {
         "@type": "WebApplication",
-        name: "OpenRide",
+        name: "OpenCycling.org",
         description: siteDescription,
         applicationCategory: "GameApplication",
         operatingSystem: "Web browser",

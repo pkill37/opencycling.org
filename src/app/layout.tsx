@@ -5,13 +5,13 @@ import { siteTitle, siteDescription, siteUrl } from "@/lib/site";
 export const viewport: Viewport = { themeColor: "#172b28" };
 export const metadata: Metadata = {
   ...(siteUrl ? { metadataBase: siteUrl } : {}),
-  title: { default: siteTitle, template: "%s | OpenRide" },
+  title: { default: siteTitle, template: "%s | OpenCycling.org" },
   description: siteDescription,
-  applicationName: "OpenRide",
+  applicationName: "OpenCycling.org",
   openGraph: {
     type: "website",
     locale: "en_US",
-    siteName: "OpenRide",
+    siteName: "OpenCycling.org",
     title: siteTitle,
     description: siteDescription,
     ...(siteUrl
@@ -19,20 +19,20 @@ export const metadata: Metadata = {
           url: siteUrl,
           images: [
             {
-              url: "/cedar-valley.webp",
-              width: 1440,
-              height: 1000,
-              alt: "Illustrative virtual cycling landscape",
+              url: "/icon.svg",
+              width: 64,
+              height: 64,
+              alt: "OpenCycling.org logo",
             },
           ],
         }
       : {}),
   },
   twitter: {
-    card: siteUrl ? "summary_large_image" : "summary",
+    card: "summary",
     title: siteTitle,
     description: siteDescription,
-    ...(siteUrl ? { images: ["/cedar-valley.webp"] } : {}),
+    ...(siteUrl ? { images: ["/icon.svg"] } : {}),
   },
 };
 export default function RootLayout({

@@ -6,6 +6,9 @@ import { lookupRoute } from "../route/route";
 import { createLandscape, type Landscape, type SceneryItem } from "./landscape";
 import { createWorldMaterials, type WorldMaterials } from "./materials";
 
+const TERRAIN_TILE_SIZE = 192;
+const TERRAIN_CELL_SIZE = 4;
+
 function box(width: number, height: number, depth: number) {
   const geometry = new T.BoxGeometry(width, height, depth);
   const uv = geometry.getAttribute("uv");
@@ -46,7 +49,8 @@ export function addTerrain(
       root.add(mesh);
       return mesh;
     });
-  const tileSize = 192;
+  const tileSize = TERRAIN_TILE_SIZE;
+  const cellSize = TERRAIN_CELL_SIZE;
   const occupied = new Set<string>();
   // Only allocate a corridor around the route, not its entire bounding rectangle.
   // Bounded to 900 tiles even for the largest supported imported routes.
@@ -82,7 +86,7 @@ export function addTerrain(
       uvs: number[] = [],
       indices: number[] = [],
       pavingIndices: number[] = [];
-    const size = 16,
+    const size = cellSize,
       segments = tileSize / size;
     const color = new T.Color();
     for (let iz = 0; iz <= segments; iz++)
@@ -128,24 +132,32 @@ export function addTerrain(
           [b, c, d],
         ]) {
           // Lower the whole triangle if its plane could bury any nearby road deck.
-          // Sampling its edges as well as its centre handles bends inside a grid cell.
+          // A terrain cell is wider than the road, so the old centre/edge
+          // probes could miss a road crossing the middle of a triangle. This is
+          // especially visible on stacked alpine switchbacks: the road ribbon
+          // is at its exact elevation while the terrain remains on the wrong
+          // side of it. A two-step barycentric lattice probes every ~2 m and
+          // keeps the terrain below a road wherever the corridor enters the
+          // triangle.
           let ceiling = Infinity;
-          for (const t of [
-            [1 / 3, 1 / 3, 1 / 3],
-            [0.5, 0.5, 0],
-            [0, 0.5, 0.5],
-            [0.5, 0, 0.5],
-          ]) {
-            const x = triangle.reduce(
-              (sum, v, i) => sum + positions[v * 3] * t[i],
-              0,
-            );
-            const z = triangle.reduce(
-              (sum, v, i) => sum + positions[v * 3 + 2] * t[i],
-              0,
-            );
-            ceiling = Math.min(ceiling, ceilingAt(x, z));
-          }
+          const probeSteps = 2;
+          for (let first = 0; first <= probeSteps; first++)
+            for (let second = 0; second <= probeSteps - first; second++) {
+              const t = [
+                first / probeSteps,
+                second / probeSteps,
+                (probeSteps - first - second) / probeSteps,
+              ];
+              const x = triangle.reduce(
+                (sum, v, i) => sum + positions[v * 3] * t[i],
+                0,
+              );
+              const z = triangle.reduce(
+                (sum, v, i) => sum + positions[v * 3 + 2] * t[i],
+                0,
+              );
+              ceiling = Math.min(ceiling, ceilingAt(x, z));
+            }
           if (Number.isFinite(ceiling))
             for (const v of triangle)
               positions[v * 3 + 1] = Math.min(positions[v * 3 + 1], ceiling);
@@ -184,8 +196,12 @@ export function addTerrain(
   }
   // Both copies of a boundary vertex use the same lowered height; this prevents
   // cracks when a neighbouring tile includes a different road-crossing triangle.
+  const verticesPerSide = tileSize / cellSize + 1;
   const boundary = (i: number) =>
-    i < 13 || i >= 156 || i % 13 === 0 || i % 13 === 12;
+    i < verticesPerSide ||
+    i >= verticesPerSide * (verticesPerSide - 1) ||
+    i % verticesPerSide === 0 ||
+    i % verticesPerSide === verticesPerSide - 1;
   const heights = new Map<string, number>();
   for (const tile of terrainTiles) {
     const p = tile.geometry.getAttribute("position");
@@ -239,25 +255,27 @@ export function terrainSampler(
 ) {
   const index = new Map(
     tiles.map((tile) => [
-      `${Math.floor(tile.userData.centerX / 192)},${Math.floor(tile.userData.centerZ / 192)}`,
+      `${Math.floor(tile.userData.centerX / TERRAIN_TILE_SIZE)},${Math.floor(tile.userData.centerZ / TERRAIN_TILE_SIZE)}`,
       tile,
     ]),
   );
   return (x: number, z: number) => {
-    const tx = Math.floor(x / 192),
-      tz = Math.floor(z / 192);
+    const tx = Math.floor(x / TERRAIN_TILE_SIZE),
+      tz = Math.floor(z / TERRAIN_TILE_SIZE);
     const tile = index.get(`${tx},${tz}`);
     if (!tile) return fallback(x, z);
-    const gx = (x - tx * 192) / 16,
-      gz = (z - tz * 192) / 16;
-    const ix = Math.min(11, Math.floor(gx)),
-      iz = Math.min(11, Math.floor(gz));
+    const gx = (x - tx * TERRAIN_TILE_SIZE) / TERRAIN_CELL_SIZE,
+      gz = (z - tz * TERRAIN_TILE_SIZE) / TERRAIN_CELL_SIZE;
+    const cellsPerSide = TERRAIN_TILE_SIZE / TERRAIN_CELL_SIZE;
+    const ix = Math.min(cellsPerSide - 1, Math.floor(gx)),
+      iz = Math.min(cellsPerSide - 1, Math.floor(gz));
     const fx = gx - ix,
       fz = gz - iz;
     const p = tile.geometry.getAttribute("position");
-    const a = iz * 13 + ix,
+    const verticesPerSide = cellsPerSide + 1;
+    const a = iz * verticesPerSide + ix,
       b = a + 1,
-      c = a + 13,
+      c = a + verticesPerSide,
       d = c + 1;
     return fx + fz <= 1
       ? p.getY(a) * (1 - fx - fz) + p.getY(b) * fx + p.getY(c) * fz

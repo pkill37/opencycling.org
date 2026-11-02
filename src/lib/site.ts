@@ -1,4 +1,5 @@
-export const siteTitle = "OpenRide — Free Virtual Cycling & Indoor Training";
+export const siteTitle =
+  "OpenCycling.org — Free Virtual Cycling & Indoor Training";
 export const siteDescription =
   "Free, open source virtual cycling in your browser. Ride Alpe d’Huez, Paris or Marseille with a Bluetooth smart trainer, or try the keyboard simulator.";
 

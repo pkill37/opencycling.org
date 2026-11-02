@@ -12,7 +12,7 @@
 ## App Shape
 
 - This is a backend-free Next.js 16 App Router static export: `next.config.ts` has `output: "export"`, trailing slashes, and unoptimized images. Do not add server actions, runtime Node APIs, databases, auth, WebSockets, or backend assumptions.
-- `src/app/page.tsx` and `src/app/ride/page.tsx` both render the client `OpenRide` component; `/ride/` starts at setup and is marked `noindex`.
+- `src/app/page.tsx` and `src/app/ride/page.tsx` both render the OpenCycling.org client experience; `/ride/` starts at setup and is marked `noindex`.
 - `SITE_URL` is optional, but if set it must be only an HTTP(S) origin with no path/query/fragment; it controls canonical/social/sitemap metadata. Without it, sitemap output is intentionally empty.
 - Production preview is `npm start`, which serves the exported `out/` directory on port 3000; Bluetooth still needs HTTPS in real hosting.
 

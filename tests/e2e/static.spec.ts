@@ -16,7 +16,7 @@ test("landing content and SEO are present without JavaScript", async ({
   const page = await context.newPage();
   await page.goto("/");
   await expect(page).toHaveTitle(
-    "OpenRide — Free Virtual Cycling & Indoor Training",
+    "OpenCycling.org — Free Virtual Cycling & Indoor Training",
   );
   await expect(page.locator('meta[name="description"]')).toHaveAttribute(
     "content",
@@ -24,7 +24,7 @@ test("landing content and SEO are present without JavaScript", async ({
   );
   await expect(page.locator('meta[property="og:title"]')).toHaveAttribute(
     "content",
-    /OpenRide/,
+    /OpenCycling\.org/,
   );
   await expect(page.locator("h1")).toHaveCount(1);
   await expect(page.locator("h1")).toHaveText(
@@ -53,7 +53,7 @@ test("landing content and SEO are present without JavaScript", async ({
   const app = structuredData["@graph"].find(
     (entry: { "@type": string }) => entry["@type"] === "WebApplication",
   );
-  expect(app.name).toBe("OpenRide");
+  expect(app.name).toBe("OpenCycling.org");
   expect(app.isAccessibleForFree).toBe(true);
   expect(app.offers.price).toBe("0");
   for (const name of ["Alpe d’Huez", "Marseille", "Paris"]) {
@@ -64,7 +64,7 @@ test("landing content and SEO are present without JavaScript", async ({
   await expect(page.locator("noscript p")).toBeVisible();
   await expect(page.locator("canvas")).toHaveCount(0);
   await page.goto("/ride/");
-  await expect(page).toHaveTitle("Set up a ride | OpenRide");
+  await expect(page).toHaveTitle("Set up a ride | OpenCycling.org");
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
     "content",
     "noindex, follow",

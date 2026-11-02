@@ -1,4 +1,4 @@
-# OpenRide MVP Specification
+# OpenCycling.org MVP Specification
 
 ## Run the implementation
 
@@ -27,7 +27,7 @@ See [implementation architecture](docs/IMPLEMENTATION.md) and [controls, setup, 
 
 ## 1. Purpose
 
-OpenRide is an open source virtual indoor cycling web application inspired by the core riding experience of platforms like MyWhoosh and Zwift, without copying their branding, maps, artwork, UI, characters, assets, or proprietary systems.
+OpenCycling.org is an open source virtual indoor cycling web application inspired by the core riding experience of platforms like MyWhoosh and Zwift, without copying their branding, maps, artwork, UI, characters, assets, or proprietary systems.
 
 The goal of the MVP is not to build a full fitness platform.
 
@@ -787,7 +787,7 @@ The home screen should be minimal.
 
 It only needs:
 
-- OpenRide title
+- OpenCycling.org title
 - connect trainer button
 - use simulator button
 - start ride button

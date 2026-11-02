@@ -7,7 +7,12 @@ import type {
 import type {
   TrainerSource,
   TrainerTelemetrySample,
+  TrainerControlSource,
 } from "../../bluetooth/types";
+import {
+  clampResistance,
+  resistanceForGrade,
+} from "../../bluetooth/ftms-control";
 import { lookupRoute } from "../route/route";
 import { stepPhysics, defaultPhysicsConfig } from "../physics/cycling";
 import { brakingEnvelope } from "../physics/cornering";
@@ -35,6 +40,12 @@ export class RideEngine {
   private gain = 0;
   private accumulator = 0;
   private speedLimits: number[];
+  private trainerControl = false;
+  private controlBusy = false;
+  private lastControlMs = 0;
+  private controlWarning = "";
+  private lastResistance?: number;
+  private simulationControlFailed = false;
   constructor(
     public course: CyclingRoute,
     public config: PhysicsConfig = { ...defaultPhysicsConfig },
@@ -47,6 +58,20 @@ export class RideEngine {
   setPaused(paused: boolean) {
     this.paused = paused;
     if (paused) this.accumulator = 0;
+    if (paused && this.trainerControl) {
+      this.trainerControl = false;
+      const control = this.source as
+        (TrainerSource & Partial<TrainerControlSource>) | undefined;
+      void control?.releaseControl?.();
+    }
+  }
+  enableTrainerControl(enabled: boolean) {
+    this.trainerControl = enabled;
+    if (enabled) this.controlWarning = "";
+  }
+  setControlWarning(message: string) {
+    this.controlWarning = message;
+    this.warning = message;
   }
   attach(source: TrainerSource, now = Date.now()) {
     this.unsubscribe?.();
@@ -55,6 +80,7 @@ export class RideEngine {
     this.source = source;
     this.connectedAt = now;
     this.warning = "";
+    this.controlWarning = "";
     this.unsubscribe = source.subscribe((s) => this.ingest(s));
   }
   ingest(s: TrainerTelemetrySample) {
@@ -101,7 +127,7 @@ export class RideEngine {
       }
     }
     const age = power?.age ?? now - this.connectedAt;
-    this.warning = real
+    const powerWarning = real
       ? age > 10000
         ? "Trainer power lost. Reconnect or use the simulator."
         : age > 3000
@@ -110,6 +136,9 @@ export class RideEngine {
             ? "Waiting for trainer power. Missing power? Try Cycling Power mode or the simulator."
             : ""
       : "";
+    this.warning = [this.controlWarning, powerWarning]
+      .filter(Boolean)
+      .join(" ");
     if (real && age > 10000) this.paused = true;
     const watts =
       (power?.value ?? 0) *
@@ -137,6 +166,7 @@ export class RideEngine {
     if (this.paused || this.completed) return;
     const s = this.state,
       p = lookupRoute(s.distanceMeters, this.course);
+    this.publishTrainerControl(p.gradient, s.speedMetersPerSecond, p.heading);
     const a = this.course.points[p.index],
       b = this.course.points[p.index + 1];
     const t =
@@ -229,7 +259,99 @@ export class RideEngine {
     };
   }
   dispose() {
+    if (this.trainerControl) {
+      const control = this.source as
+        (TrainerSource & Partial<TrainerControlSource>) | undefined;
+      void control?.releaseControl?.();
+    }
+    this.trainerControl = false;
     this.unsubscribe?.();
     this.unsubscribe = undefined;
+  }
+  private publishTrainerControl(
+    gradient: number,
+    speed: number,
+    heading: number,
+  ) {
+    if (!this.trainerControl || this.controlBusy || !this.source) return;
+    const control = this.source as TrainerSource &
+      Partial<TrainerControlSource>;
+    const capabilities = control.controlCapabilities;
+    if (!capabilities?.supported) {
+      if (control.controlStatusMessage) {
+        this.trainerControl = false;
+        this.setControlWarning(control.controlStatusMessage);
+      }
+      return;
+    }
+    const now = Date.now();
+    if (now - this.lastControlMs < 250) return;
+    this.lastControlMs = now;
+    this.controlBusy = true;
+    const targetResistance = resistanceForGrade(
+      gradient,
+      speed,
+      this.config,
+      capabilities,
+    );
+    const sendResistance = async () => {
+      if (!control.setTargetResistance)
+        throw new Error("Trainer resistance control is unavailable.");
+      const range = capabilities.resistanceRange ?? {
+        min: 0,
+        max: 100,
+        step: 0.1,
+      };
+      const previous = this.lastResistance ?? range.min;
+      const maxDelta = Math.max(1, range.step);
+      const smoothed = Math.max(
+        previous - maxDelta,
+        Math.min(previous + maxDelta, targetResistance),
+      );
+      const next = clampResistance(smoothed, capabilities);
+      await control.setTargetResistance(next);
+      this.lastResistance = next;
+    };
+    const operation = async () => {
+      if (
+        capabilities.supportsSimulationParameters &&
+        control.setSimulationParameters &&
+        !this.simulationControlFailed
+      ) {
+        try {
+          await control.setSimulationParameters({
+            windSpeedMetersPerSecond:
+              this.config.windEast * Math.sin(heading) +
+              this.config.windNorth * Math.cos(heading),
+            gradePercent: gradient * 100,
+            rollingResistanceCoefficient: this.config.crr,
+            windResistanceCoefficient: this.config.cda * this.config.airDensity,
+          });
+          return;
+        } catch (error) {
+          if (!capabilities.supportsResistanceLevel) throw error;
+          this.simulationControlFailed = true;
+          this.logControlFallback(error);
+        }
+      }
+      if (capabilities.supportsResistanceLevel) {
+        await sendResistance();
+        return;
+      }
+      throw new Error("Trainer control path is unsupported.");
+    };
+    void operation()
+      .catch((error: unknown) => {
+        this.trainerControl = false;
+        this.setControlWarning(
+          `Trainer control unavailable — virtual resistance only. ${error instanceof Error ? error.message : "Command rejected."}`,
+        );
+      })
+      .finally(() => {
+        this.controlBusy = false;
+      });
+  }
+  private logControlFallback(error: unknown) {
+    this.warning = `Simulation-grade trainer control rejected; using resistance-level fallback. ${error instanceof Error ? error.message : "Command rejected."}`;
   }
 }

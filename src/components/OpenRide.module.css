@@ -266,6 +266,29 @@
   align-items: stretch;
   gap: 16px;
 }
+.controlConsent {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.controlConsent span {
+  display: grid;
+  gap: 3px;
+}
+.controlConsent small {
+  color: var(--muted);
+}
+.controlStatus {
+  color: var(--accent);
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
 .setupControls .start {
   min-height: 44px !important;
   margin: 0;

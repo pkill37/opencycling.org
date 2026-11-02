@@ -25,7 +25,8 @@ export default function PhysicsSettings({
       <p>
         Still-air baseline, asphalt, no drafting or rotating inertia. Automatic
         corner braking is a training model, not outdoor safety advice. Gradients
-        do not control trainer resistance.
+        control only virtual physics unless optional FTMS trainer control is
+        explicitly enabled.
       </p>
       {fields.map(([key, label, min, max, step]) => (
         <label key={key}>

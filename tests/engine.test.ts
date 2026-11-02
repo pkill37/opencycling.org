@@ -5,7 +5,10 @@ import { lookupRoute } from "../src/game/route/route";
 import { route } from "./fixtures/loop-route";
 import { RideEngine } from "../src/game/loop/engine";
 import { SimulatorSource } from "../src/bluetooth/sources/simulator-source";
-import type { TrainerSource } from "../src/bluetooth/types";
+import type {
+  TrainerControlCapabilities,
+  TrainerSource,
+} from "../src/bluetooth/types";
 const fake: TrainerSource = {
   id: "test",
   label: "Trainer",
@@ -197,6 +200,51 @@ test("trainer freshness and loss thresholds preserve their exact boundaries", ()
   assert.equal(engine.input(10001).power, 0);
   assert.equal(engine.paused, true);
   assert.match(engine.warning, /lost/);
+});
+
+test("simulation control rejection falls back to smoothed resistance control", async () => {
+  const writes: number[] = [];
+  const capabilities: TrainerControlCapabilities = {
+    supported: true,
+    supportsSimulationParameters: true,
+    supportsResistanceLevel: true,
+    resistanceRange: { min: 0, max: 20, step: 0.1 },
+  };
+  const source: TrainerSource & {
+    controlCapabilities: TrainerControlCapabilities;
+    requestControl: () => Promise<void>;
+    setSimulationParameters: () => Promise<void>;
+    setTargetResistance: (level: number) => Promise<void>;
+  } = {
+    ...fake,
+    controlCapabilities: capabilities,
+    requestControl: async () => {},
+    setSimulationParameters: async () => {
+      throw new Error("Trainer rejected simulation parameters.");
+    },
+    setTargetResistance: async (level) => {
+      writes.push(level);
+    },
+  };
+  const engine = new RideEngine(route);
+  engine.attach(source, 0);
+  engine.enableTrainerControl(true);
+  const originalNow = Date.now;
+  let now = 1000;
+  Date.now = () => now;
+  try {
+    engine.step(1 / 60, 300, 80);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(writes.length, 1);
+    assert.ok(writes[0] >= 0 && writes[0] <= 1);
+    now += 300;
+    engine.step(1 / 60, 300, 80);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(writes.length, 2);
+    assert.ok(writes[1] - writes[0] <= 1);
+  } finally {
+    Date.now = originalNow;
+  }
 });
 
 test("cadence falls back independently when FTMS cadence becomes stale", () => {

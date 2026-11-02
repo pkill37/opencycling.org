@@ -6,8 +6,8 @@ export function LandingIntro() {
       <h1>Free virtual cycling in your browser.</h1>
       <p>
         Ride French roads with your Bluetooth smart trainer or try the keyboard
-        simulator. OpenRide is an open source indoor cycling game, free to play
-        with no account needed.
+        simulator. OpenCycling.org is an open source indoor cycling game, free
+        to play with no account needed.
       </p>
     </>
   );
@@ -18,7 +18,7 @@ export function LandingGuide() {
     <section className={styles.guide} aria-labelledby="cycling-guide">
       <h2 id="cycling-guide">Frequently asked questions</h2>
       <details>
-        <summary>What can I ride in OpenRide?</summary>
+        <summary>What can I ride on OpenCycling.org?</summary>
         <p>
           Choose the Alpe d’Huez climb, Marseille or Paris, then explore a 3D
           cycling world powered by your effort. Follow your power, cadence,
@@ -29,12 +29,12 @@ export function LandingGuide() {
       <details>
         <summary>How do I connect a smart trainer?</summary>
         <p>
-          OpenRide reads power and cadence from compatible Bluetooth trainers
-          using FTMS or Cycling Power Service. Open the site over HTTPS in a
-          browser that supports Web Bluetooth, choose your course and connect
-          your trainer. The connection is read-only: OpenRide does not change
-          trainer resistance. Physical trainer compatibility depends on your
-          device and browser.
+          OpenCycling.org reads power and cadence from compatible Bluetooth
+          trainers using FTMS or Cycling Power Service. Open the site over HTTPS
+          in a browser that supports Web Bluetooth, choose your course and
+          connect your trainer. Resistance control is optional and requires your
+          explicit consent; otherwise the connection remains read-only. Physical
+          trainer compatibility depends on your device and browser.
         </p>
       </details>
       <details>
@@ -47,15 +47,15 @@ export function LandingGuide() {
         </p>
       </details>
       <details>
-        <summary>Is OpenRide free, and do I need an account?</summary>
+        <summary>Is OpenCycling.org free, and do I need an account?</summary>
         <p>
-          OpenRide is free to play and open source. You can choose a route,
-          connect a compatible trainer or use the simulator, and start riding
-          without an account or subscription.
+          OpenCycling.org is free to play and open source. You can choose a
+          route, connect a compatible trainer or use the simulator, and start
+          riding without an account or subscription.
         </p>
       </details>
       <details>
-        <summary>What does my browser need to run OpenRide?</summary>
+        <summary>What does my browser need to run OpenCycling.org?</summary>
         <p>
           The 3D ride requires JavaScript and WebGL. A trainer connection also
           requires HTTPS and Web Bluetooth support on your browser and device.
@@ -65,20 +65,21 @@ export function LandingGuide() {
       </details>
       <details>
         <summary>
-          Does OpenRide automatically change trainer resistance?
+          Does OpenCycling.org automatically change trainer resistance?
         </summary>
         <p>
-          No. OpenRide reads trainer telemetry without sending resistance
-          commands. Your power and the virtual road gradient affect your speed
-          in the game; adjust resistance on your trainer separately.
+          Only when you explicitly enable trainer control during setup. FTMS
+          simulation-grade control is preferred, with resistance-level fallback;
+          unsupported or CPS-only trainers remain read-only. Virtual physics
+          continues if hardware control is unavailable.
         </p>
       </details>
       <details>
         <summary>Can I import my own GPX cycling route?</summary>
         <p>
           Yes. Open the route import option during setup and select a GPX file
-          or an OpenRide route package in JSON format, up to 20 MB. For GPX
-          files, choose a track and segment, validate it, then review the
+          or an OpenCycling.org route package in JSON format, up to 20 MB. For
+          GPX files, choose a track and segment, validate it, then review the
           preview before loading. Files are processed locally in your browser.
         </p>
       </details>
@@ -103,8 +104,8 @@ export function LandingGuide() {
         <summary>Where does my ride data go?</summary>
         <p>
           Trainer telemetry and cycling simulation stay in your browser.
-          OpenRide has no backend and does not upload your Bluetooth device or
-          ride data.
+          OpenCycling.org has no backend and does not upload your Bluetooth
+          device or ride data.
         </p>
       </details>
       <a href="/ride/">Set up a virtual cycling ride</a>

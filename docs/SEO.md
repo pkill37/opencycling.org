@@ -18,7 +18,7 @@ search engines can read its noindex directive.
 
 After deployment:
 
-1. Confirm `/`, `/robots.txt`, `/sitemap.xml` and `/cedar-valley.webp` return HTTP
+1. Confirm `/`, `/robots.txt`, `/sitemap.xml` and `/icon.svg` return HTTP
    200 from the public host. Configure hosting redirects to serve one HTTPS
    origin, including a consistent www/non-www preference.
 2. Verify the homepage canonical and sitemap use that origin.

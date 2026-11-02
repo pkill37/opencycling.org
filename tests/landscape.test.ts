@@ -134,6 +134,10 @@ for (const id of ["alpe-d-huez", "marseille", "paris"])
       const hits = ray.intersectObjects(root.children);
       assert.ok(hits.length, `missing terrain at ${d}m`);
       assert.ok(hits[0].point.y < p.y, `terrain covers road at ${d}m`);
+      assert.ok(
+        p.y - hits[0].point.y < 8,
+        `terrain is detached from road at ${d}m`,
+      );
       const terrainHits = ray.intersectObjects(tiles);
       assert.ok(
         Math.abs(groundAt(p.x, p.z) - terrainHits[0].point.y) < 1e-6,
