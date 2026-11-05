@@ -9,7 +9,6 @@ import {
   useSyncExternalStore,
 } from "react";
 import { defaultPhysicsConfig } from "@/game/physics/cycling";
-import RouteImport from "./RouteImport";
 import RouteSelection from "./RouteSelection";
 import { bundledRoutes, loadBundledRoute } from "@/game/route/bundled";
 import RouteMinimap from "./RouteMinimap";
@@ -60,9 +59,14 @@ export default function OpenRide({
   if (!initialRoute)
     return (
       <main className={styles.app}>
+        <header className={styles.header}>
+          <Link href="/" prefetch={false} className={styles.logo}>
+            <span>◒</span> OpenCycling.org
+          </Link>
+          <span className={styles.local}>FREE TO PLAY · NO ACCOUNT NEEDED</span>
+        </header>
         <section className={styles.home}>
           <div className={styles.intro}>
-            <div className={styles.eyebrow}>PICK A ROAD. MAKE IT YOURS.</div>
             <LandingIntro />
             <RouteSelection
               selected="alpe-d-huez-test"
@@ -169,7 +173,6 @@ function LoadedOpenRide({
     [fps, setFps] = useState(60),
     [worldError, setWorldError] = useState(""),
     [warning, setWarning] = useState(""),
-    [debugScan, setDebugScan] = useState(false),
     [cps, setCps] = useState(false),
     [controlResistance, setControlResistance] = useState(false),
     [controlActive, setControlActive] = useState(false),
@@ -202,7 +205,7 @@ function LoadedOpenRide({
   }, [phase, source, sim]);
   const connect = (reconnect = false) => {
     setSetup(true);
-    void trainer.connect(debugScan, cps, reconnect);
+    void trainer.connect(false, cps, reconnect);
   };
   const start = async () => {
     let hardwareControl = false;
@@ -277,6 +280,15 @@ function LoadedOpenRide({
     world.current?.toggleCamera();
     setCamera(world.current?.cameraName() ?? "Chase");
   }, []);
+  const seekSimulator = useCallback(
+    (distanceMeters: number) => {
+      if (phase !== "ride" || source !== "simulator") return;
+      activeEngine.seek(distanceMeters);
+      setSnapshot({ ...activeEngine.state });
+      setPaused(activeEngine.paused);
+    },
+    [activeEngine, phase, source],
+  );
   const worldActive = phase !== "home";
   const showingSummary = useRef(false);
   useEffect(() => {
@@ -544,7 +556,6 @@ function LoadedOpenRide({
           </header>
           <section className={styles.home}>
             <div className={styles.intro}>
-              <div className={styles.eyebrow}>PICK A ROAD. MAKE IT YOURS.</div>
               <LandingIntro />
               <RouteSelection
                 selected={menuRoute?.id ?? route.id}
@@ -566,18 +577,6 @@ function LoadedOpenRide({
                 </a>
               )}
 
-              {["alpe-d-huez-test", "paris", "marseille"].includes(
-                route.id,
-              ) && (
-                <p>
-                  <a href="https://registry.opendata.aws/terrain-tiles/">
-                    Terrain: Mapzen
-                  </a>{" "}
-                  · SRTM courtesy of USGS · Produced using Copernicus data and
-                  information funded by the European Union — EU-DEM layers.
-                  Surrounding terrain only; road elevations unchanged.
-                </p>
-              )}
               {routeLoading && <p role="status">Loading route…</p>}
               {routeError && <p role="alert">{routeError}</p>}
 
@@ -624,6 +623,97 @@ function LoadedOpenRide({
                             : "Connect"}
                     </span>
                   </button>
+                  {(!availability.available || trainer.state === "error") && (
+                    <div className={styles.bluetoothIssue} role="status">
+                      <strong>
+                        {!availability.available
+                          ? "Bluetooth is unavailable"
+                          : "Trainer connection failed"}
+                      </strong>
+                      {!availability.available &&
+                        availability.details.map((detail) => (
+                          <span key={detail}>{detail}</span>
+                        ))}
+                      {trainer.error && <p role="alert">{trainer.error}</p>}
+                      {trainer.diagnostics.length > 0 && (
+                        <ol className={styles.bluetoothLog}>
+                          {trainer.diagnostics.slice(-3).map((entry, index) => (
+                            <li key={entry + "-" + index}>{entry}</li>
+                          ))}
+                        </ol>
+                      )}
+                      {availability.available && (
+                        <button
+                          className="button"
+                          onClick={() => connect(true)}
+                        >
+                          Reconnect trainer
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {setup && source === "bluetooth" && (
+                    <details className={styles.connection}>
+                      <summary>Bluetooth debug log</summary>
+                      <div aria-live="polite">
+                        <strong>
+                          {trainer.label} · {trainer.state.replaceAll("-", " ")}
+                        </strong>
+                        <span>
+                          {trainer.services.join(" + ") ||
+                            "No services detected yet"}
+                        </span>
+                        <div>
+                          {sample?.powerWatts ?? "—"} W ·{" "}
+                          {sample?.cadenceRpm ?? "—"} rpm ·{" "}
+                          {sample?.speedMetersPerSecond === undefined
+                            ? "—"
+                            : (sample.speedMetersPerSecond * 3.6).toFixed(
+                                1,
+                              )}{" "}
+                          km/h raw
+                        </div>
+                        <span>
+                          Last packet:{" "}
+                          {sample
+                            ? new Date(sample.timestampMs).toLocaleTimeString()
+                            : "Waiting"}
+                        </span>
+                        {trainer.features.map((f) => (
+                          <small key={f}>{f}</small>
+                        ))}
+                        {trainer.error && <p role="alert">{trainer.error}</p>}
+                        {trainer.diagnostics.length > 0 && (
+                          <ol className={styles.bluetoothLog}>
+                            {trainer.diagnostics.map((entry, index) => (
+                              <li key={entry + "-" + index}>{entry}</li>
+                            ))}
+                          </ol>
+                        )}
+                        <button
+                          className="button"
+                          onClick={() => connect(true)}
+                        >
+                          Reconnect
+                        </button>
+                      </div>
+                    </details>
+                  )}
+                  <label className={styles.bluetoothOption}>
+                    <input
+                      type="checkbox"
+                      checked={cps}
+                      onChange={(e) => setCps(e.target.checked)}
+                    />
+                    <svg
+                      className={styles.bluetoothOptionIcon}
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                    >
+                      <path d="m13 2-8 12h6l-1 8 8-12h-6l1-8Z" />
+                    </svg>
+                    <span>Prefer Cycling Power mode</span>
+                  </label>
                 </div>
                 <div
                   className={styles.modeSelect}
@@ -656,7 +746,7 @@ function LoadedOpenRide({
                   }
                   onClick={start}
                 >
-                  Start ride <span>→</span>
+                  Start <span>→</span>
                 </button>
               </div>
               {canControl && (
@@ -677,92 +767,7 @@ function LoadedOpenRide({
                   </span>
                 </label>
               )}
-              <details className={styles.debugSettings}>
-                <summary>Debug settings</summary>
-                <div className={styles.debugGrid}>
-                  {setup && source === "bluetooth" && (
-                    <details>
-                      <summary>Bluetooth debug log</summary>
-                      <div className={styles.connection} aria-live="polite">
-                        <strong>
-                          {trainer.label} · {trainer.state.replaceAll("-", " ")}
-                        </strong>
-                        <span>
-                          {trainer.services.join(" + ") ||
-                            "No services detected yet"}
-                        </span>
-                        <div>
-                          {sample?.powerWatts ?? "—"} W ·{" "}
-                          {sample?.cadenceRpm ?? "—"} rpm ·{" "}
-                          {sample?.speedMetersPerSecond === undefined
-                            ? "—"
-                            : (sample.speedMetersPerSecond * 3.6).toFixed(
-                                1,
-                              )}{" "}
-                          km/h raw
-                        </div>
-                        <span>
-                          Last packet:{" "}
-                          {sample
-                            ? new Date(sample.timestampMs).toLocaleTimeString()
-                            : "Waiting"}
-                        </span>
-                        {trainer.features.map((f) => (
-                          <small key={f}>{f}</small>
-                        ))}
-                        {trainer.error && <p role="alert">{trainer.error}</p>}
-                        {trainer.diagnostics.length > 0 && (
-                          <ol className={styles.bluetoothLog}>
-                            {trainer.diagnostics.map((entry, index) => (
-                              <li key={`${entry}-${index}`}>{entry}</li>
-                            ))}
-                          </ol>
-                        )}
-                        <button
-                          className="button"
-                          onClick={() => connect(true)}
-                        >
-                          Reconnect
-                        </button>
-                      </div>
-                    </details>
-                  )}
-                  {!availability.available && (
-                    <details className={styles.connection}>
-                      <summary>Bluetooth diagnostics</summary>
-                      {availability.details.map((detail) => (
-                        <p key={detail}>{detail}</p>
-                      ))}
-                    </details>
-                  )}
-                  <RouteImport onSelect={setRoute} />
-                  <PhysicsSettings value={physics} onChange={setPhysics} />
-                  <details className={styles.advanced}>
-                    <summary>Connection options & controls</summary>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={cps}
-                        onChange={(e) => setCps(e.target.checked)}
-                      />{" "}
-                      Prefer Cycling Power mode
-                    </label>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={debugScan}
-                        onChange={(e) => setDebugScan(e.target.checked)}
-                      />{" "}
-                      Debug: show all Bluetooth devices
-                    </label>
-                    <p>
-                      ↑ / W increase · ↓ / S decrease · 1–9 power presets ·
-                      Space sprint · C camera · H HUD · P pause · Esc finish ·
-                      F3 diagnostics
-                    </p>
-                  </details>
-                </div>
-              </details>
+              <PhysicsSettings value={physics} onChange={setPhysics} />
             </div>
             {!initialSetup && <LandingGuide />}
           </section>
@@ -775,6 +780,7 @@ function LoadedOpenRide({
               <RouteMinimap
                 route={activeEngine.course}
                 distanceMeters={snapshot.distanceMeters}
+                onSeek={source === "simulator" ? seekSimulator : undefined}
               />
               <div className={styles.telemetry}>
                 {source !== "simulator" && (

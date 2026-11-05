@@ -7,6 +7,7 @@ import type { RideEngine } from "../loop/engine";
 import type { ZombiesSnapshot } from "../modes/zombies";
 import { createRider } from "./rider";
 import { createScenery } from "./scenery";
+import { createTexturedGeometry } from "./geometry";
 
 function ribbon(
   route: CyclingRoute,
@@ -19,10 +20,21 @@ function ribbon(
   const positions: number[] = [],
     indices: number[] = [],
     uvs: number[] = [];
-  route.points.forEach((p, i) => {
-    const a = route.points[Math.max(0, i - 1)],
-      b = route.points[Math.min(route.points.length - 1, i + 1)];
-    const heading = Math.atan2(b.x - a.x, b.z - a.z);
+  // Keep the rendered ribbon dense enough that tight GPS corners do not read as
+  // polygonal. This only affects the world mesh; route lookup and physics keep
+  // their original sampling and measurements.
+  const spacing = Math.max(1.5, Math.min(4, route.distanceMeters / 3500));
+  const samples: ReturnType<typeof lookupRoute>[] = [];
+  for (let distance = 0; distance < route.distanceMeters; distance += spacing)
+    samples.push(lookupRoute(distance, route));
+  samples.push(lookupRoute(route.distanceMeters, route));
+  samples.forEach((p, i) => {
+    const previous = samples[Math.max(0, i - 1)];
+    const next = samples[Math.min(samples.length - 1, i + 1)];
+    const heading =
+      previous === next
+        ? p.heading
+        : Math.atan2(next.x - previous.x, next.z - previous.z);
     for (const side of [-1, 1]) {
       const lateral = offset + (side * width) / 2;
       positions.push(
@@ -30,18 +42,17 @@ function ribbon(
         p.y + lift,
         p.z - Math.sin(heading) * lateral,
       );
-      uvs.push(((side + 1) * width) / 8, p.distanceMeters / 8);
+      uvs.push(
+        ((side + 1) * width) / 8,
+        (p.progress * route.distanceMeters) / 8,
+      );
     }
     if (i) {
       const n = i * 2;
       indices.push(n - 2, n, n - 1, n - 1, n, n + 1);
     }
   });
-  const geometry = new T.BufferGeometry();
-  geometry.setAttribute("position", new T.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute("uv", new T.Float32BufferAttribute(uvs, 2));
-  geometry.setIndex(indices);
-  geometry.computeVertexNormals();
+  const geometry = createTexturedGeometry(positions, uvs, indices);
   const mesh = new T.Mesh(
     geometry,
     material ??
@@ -53,6 +64,33 @@ function ribbon(
   );
   mesh.receiveShadow = true;
   return mesh;
+}
+
+function createContactShadow() {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 128;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  const gradient = context.createRadialGradient(64, 64, 4, 64, 64, 62);
+  gradient.addColorStop(0, "rgba(11, 19, 17, 0.48)");
+  gradient.addColorStop(0.45, "rgba(11, 19, 17, 0.22)");
+  gradient.addColorStop(1, "rgba(11, 19, 17, 0)");
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 128, 128);
+  const texture = new T.CanvasTexture(canvas);
+  texture.colorSpace = T.SRGBColorSpace;
+  const shadow = new T.Mesh(
+    new T.PlaneGeometry(1.45, 2.35),
+    new T.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      depthWrite: false,
+      opacity: 0.8,
+    }),
+  );
+  shadow.rotation.x = -Math.PI / 2;
+  shadow.renderOrder = 1;
+  return shadow;
 }
 
 function addStartGate(scene: T.Scene, route: CyclingRoute) {
@@ -177,14 +215,21 @@ export function createWorld(
     antialias: true,
     powerPreference: "high-performance",
   });
-  const maxPixelRatio = Math.min(window.devicePixelRatio, 1.5);
+  // Keep the default render target modest; the adaptive scaler can still lower
+  // it on slower devices, but starting at 1.5x causes an avoidable GPU spike.
+  const lowPowerDevice =
+    (navigator.hardwareConcurrency ?? 4) <= 4 || window.innerWidth <= 900;
+  const maxPixelRatio = Math.min(
+    window.devicePixelRatio,
+    lowPowerDevice ? 1 : 1.25,
+  );
   renderer.setPixelRatio(maxPixelRatio);
   renderer.setSize(host.clientWidth, host.clientHeight);
   renderer.outputColorSpace = T.SRGBColorSpace;
   renderer.toneMapping = T.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 1.1;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = T.PCFSoftShadowMap;
+  renderer.shadowMap.type = T.PCFShadowMap;
   host.appendChild(renderer.domElement);
   const camera = new T.PerspectiveCamera(
     52,
@@ -193,9 +238,12 @@ export function createWorld(
     4000,
   );
   scene.add(new T.HemisphereLight(0xd9edff, 0x77765b, 1.8));
+  const fill = new T.DirectionalLight(0xb9d9ff, 0.42);
+  fill.position.set(-120, 90, -160);
+  scene.add(fill);
   const sun = new T.DirectionalLight(0xfff0d7, 2.3);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.mapSize.set(512, 512);
   Object.assign(sun.shadow.camera, {
     left: -55,
     right: 55,
@@ -206,6 +254,10 @@ export function createWorld(
   });
   sun.shadow.normalBias = 0.04;
   sun.shadow.bias = -0.0002;
+  // The sun follows the rider, but a 20 Hz shadow refresh is visually smooth
+  // enough and avoids rebuilding a large shadow map on every animation frame.
+  renderer.shadowMap.autoUpdate = false;
+  sun.shadow.needsUpdate = true;
   scene.add(sun, sun.target);
   const scenery = createScenery(scene, route, renderer, elevation, prepared);
   if (scenery.region === "alpine") {
@@ -238,7 +290,9 @@ export function createWorld(
   scene.add(marks);
   addStartGate(scene, route);
   const rider = createRider();
+  const riderShadow = createContactShadow();
   scene.add(rider.group);
+  if (riderShadow) scene.add(riderShadow);
   const zombieMeshes = Array.from({ length: 4 }, (_, index) => {
     const zombie = createZombie(index);
     zombie.visible = false;
@@ -249,6 +303,7 @@ export function createWorld(
     initialized = false,
     qualityTime = 0,
     qualityFrames = 0,
+    shadowTime = 1 / 20,
     orbitYaw = 0,
     orbitPitch = 0,
     orbitDistance = 5.7,
@@ -257,6 +312,10 @@ export function createWorld(
     lastPointerX = 0,
     lastPointerY = 0;
   const canvas = renderer.domElement;
+  const cameraTarget = new T.Vector3();
+  const cameraOffset = new T.Vector3();
+  const desiredCameraPosition = new T.Vector3();
+  const lookTarget = new T.Vector3();
   canvas.style.cursor = "grab";
   canvas.style.touchAction = "none";
   const clamp = (value: number, min: number, max: number) =>
@@ -264,7 +323,7 @@ export function createWorld(
   const resetOrbit = () => {
     orbitYaw = 0;
     orbitPitch = 0;
-    orbitDistance = cameraMode === 0 ? 5.7 : 0.35;
+    orbitDistance = cameraMode === 0 ? 6.2 : 0.35;
     initialized = false;
   };
   const stopDragging = () => {
@@ -299,8 +358,8 @@ export function createWorld(
   const onWheel = (event: WheelEvent) => {
     orbitDistance = clamp(
       orbitDistance * Math.exp(event.deltaY * 0.001),
-      cameraMode === 0 ? 3.2 : 0.18,
-      cameraMode === 0 ? 14 : 1.4,
+      cameraMode === 0 ? 2.8 : 0.18,
+      cameraMode === 0 ? 22 : 1.4,
     );
     event.preventDefault();
   };
@@ -361,6 +420,11 @@ export function createWorld(
         "YXZ",
       );
       rider.group.visible = cameraMode === 0;
+      if (riderShadow) {
+        riderShadow.position.set(point.x, point.y + 0.012, point.z);
+        riderShadow.rotation.y = point.heading;
+        riderShadow.visible = cameraMode === 0;
+      }
       const moving = !engine.paused && !engine.completed && !resting;
       rider.update(
         dt,
@@ -423,38 +487,44 @@ export function createWorld(
         (mesh.userData.leftLeg as T.Mesh).rotation.x = stride * 0.45;
         (mesh.userData.rightLeg as T.Mesh).rotation.x = -stride * 0.45;
       });
-      const ahead = lookupRoute(
-          Math.min(state.distanceMeters + 12, route.distanceMeters),
-          route,
-        ),
-        target = new T.Vector3(
-          point.x,
-          point.y + (cameraMode ? 1.5 : 1),
-          point.z,
-        );
+      cameraTarget.set(point.x, point.y + (cameraMode ? 1.5 : 1), point.z);
       const distance = orbitDistance;
       const orbitAngle =
         point.heading + (cameraMode ? orbitYaw : Math.PI + orbitYaw);
-      const desired = target
-        .clone()
-        .add(
-          new T.Vector3(
-            Math.sin(orbitAngle) * distance,
-            (cameraMode ? 0.15 : 1.65) + Math.sin(orbitPitch) * distance,
-            Math.cos(orbitAngle) * distance,
-          ),
-        );
+      cameraOffset.set(
+        Math.sin(orbitAngle) * distance,
+        (cameraMode ? 0.15 : 1.65) + Math.sin(orbitPitch) * distance,
+        Math.cos(orbitAngle) * distance,
+      );
+      desiredCameraPosition.copy(cameraTarget).add(cameraOffset);
       if (!initialized) {
-        camera.position.copy(desired);
+        camera.position.copy(desiredCameraPosition);
         initialized = true;
-      } else camera.position.lerp(desired, 1 - Math.exp(-dt * 5));
+      } else camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-dt * 5));
       camera.position.y = Math.max(
         camera.position.y,
         scenery.groundAt(camera.position.x, camera.position.z) + 0.5,
       );
-      camera.lookAt(ahead.x, ahead.y + (cameraMode ? 1.5 : 1), ahead.z);
-      sun.position.set(point.x - 80, point.y + 150, point.z + 65);
-      sun.target.position.set(point.x, point.y, point.z);
+      const lookOffset = cameraMode ? 12 : Math.cos(orbitYaw) * 12;
+      const lookDistance = route.loop
+        ? (((state.distanceMeters + lookOffset) % route.distanceMeters) +
+            route.distanceMeters) %
+          route.distanceMeters
+        : clamp(state.distanceMeters + lookOffset, 0, route.distanceMeters);
+      const lookPoint = lookupRoute(lookDistance, route);
+      lookTarget.set(
+        lookPoint.x,
+        lookPoint.y + (cameraMode ? 1.5 : 1),
+        lookPoint.z,
+      );
+      camera.lookAt(lookTarget);
+      shadowTime += Math.max(0, dt);
+      if (shadowTime >= 1 / 20) {
+        sun.position.set(point.x - 80, point.y + 150, point.z + 65);
+        sun.target.position.set(point.x, point.y, point.z);
+        sun.shadow.needsUpdate = true;
+        shadowTime = 0;
+      }
       scenery.update(dt, point.x, point.z);
       renderer.render(scene, camera);
     },

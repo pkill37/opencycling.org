@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { terrainNoise, terrainRelief } from "../src/game/world/noise";
+import {
+  terrainDetail,
+  terrainNoise,
+  terrainRelief,
+} from "../src/game/world/noise";
 
 test("terrain relief stays bounded, repeatable and continuous across lattice boundaries", () => {
   for (let i = -100; i <= 100; i++) {
@@ -9,6 +13,7 @@ test("terrain relief stays bounded, repeatable and continuous across lattice bou
         z = (i + 0.37) * scale;
       const sample = terrainRelief(x, z);
       assert.ok(Math.abs(sample) <= 1);
+      assert.ok(Math.abs(terrainDetail(x, z)) <= 1);
       assert.equal(sample, terrainRelief(x, z));
       assert.ok(
         Math.abs(terrainRelief(x - 0.001, z) - terrainRelief(x + 0.001, z)) <
@@ -21,4 +26,5 @@ test("terrain relief stays bounded, repeatable and continuous across lattice bou
     }
   }
   assert.notEqual(terrainRelief(47, 92), terrainRelief(92, 47));
+  assert.notEqual(terrainDetail(47, 92), terrainDetail(92, 47));
 });

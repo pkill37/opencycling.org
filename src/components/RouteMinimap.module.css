@@ -19,6 +19,18 @@
   width: 100%;
   height: auto;
 }
+.interactive {
+  pointer-events: auto;
+  cursor: crosshair;
+}
+.seekHint {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 8px;
+  letter-spacing: 1px;
+  text-align: center;
+}
 @media (max-width: 760px) {
   .map {
     right: max(12px, env(safe-area-inset-right));

@@ -73,6 +73,22 @@ test("pause stops elapsed time and distance; resume continues", () => {
   e.step(1, 200, 80);
   assert.ok(e.state.distanceMeters > before.distanceMeters);
 });
+test("simulator time travel seeks route state and reopens the finish", () => {
+  const e = new RideEngine(route);
+  e.step(1, 200, 80);
+  e.completed = true;
+  e.seek(route.distanceMeters / 2);
+  assert.equal(e.completed, false);
+  assert.equal(e.state.distanceMeters, route.distanceMeters / 2);
+  assert.equal(
+    e.state.elevationMeters,
+    lookupRoute(route.distanceMeters / 2, route).elevationMeters,
+  );
+  e.seek(route.distanceMeters + 100);
+  assert.equal(e.completed, true);
+  assert.equal(e.state.distanceMeters, route.distanceMeters);
+  assert.equal(e.state.speedMetersPerSecond, 0);
+});
 test("lap completion clamps distance, stops rider and produces a weighted summary", () => {
   const e = new RideEngine(route);
   for (let i = 0; i < 200000 && !e.completed; i++) e.step(1 / 60, 400, 90);

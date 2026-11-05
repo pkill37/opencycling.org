@@ -19,6 +19,48 @@ import {
 } from "../src/bluetooth/ftms-control";
 import { defaultPhysicsConfig } from "../src/game/physics/cycling";
 const packet = (bytes: number[]) => new DataView(Uint8Array.from(bytes).buffer);
+function mockDevice(
+  name: string,
+  getCharacteristic: (uuid: string) => Promise<unknown>,
+) {
+  const device = new EventTarget() as EventTarget & {
+    name: string;
+    gatt: unknown;
+  };
+  device.name = name;
+  device.gatt = {
+    connect: async () => device.gatt,
+    disconnect: () => {},
+    getPrimaryService: async (uuid: string) => {
+      if (uuid !== U.FTMS_SERVICE) throw new Error("No CPS");
+      return { getCharacteristic };
+    },
+  };
+  return device;
+}
+function installBrowserMock(device: EventTarget) {
+  const navigatorDescriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "navigator",
+    ),
+    windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: { bluetooth: { requestDevice: async () => device } },
+  });
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { isSecureContext: true, navigator: globalThis.navigator },
+  });
+  return () => {
+    if (navigatorDescriptor)
+      Object.defineProperty(globalThis, "navigator", navigatorDescriptor);
+    else Reflect.deleteProperty(globalThis, "navigator");
+    if (windowDescriptor)
+      Object.defineProperty(globalThis, "window", windowDescriptor);
+    else Reflect.deleteProperty(globalThis, "window");
+  };
+}
 test("FTMS control commands encode and parse acknowledged responses", () => {
   assert.deepEqual(Array.from(encodeRequestControl()), [0]);
   assert.deepEqual(
@@ -169,36 +211,12 @@ test("mock GATT discovery, notifications, disconnect and manual reconnect", asyn
     }
   }
   const characteristic = new Characteristic();
-  const device = new EventTarget() as EventTarget & {
-    name: string;
-    gatt: unknown;
-  };
-  device.name = "Fixture Trainer";
-  const gatt = {
-    connect: async () => gatt,
-    disconnect: () => {},
-    getPrimaryService: async (uuid: string) => {
-      if (uuid !== U.FTMS_SERVICE) throw new Error("No CPS");
-      return {
-        getCharacteristic: async (uuid: string) => {
-          if (uuid === U.FITNESS_MACHINE_FEATURE)
-            return { readValue: async () => packet([1, 0, 0, 0, 0, 0, 0, 0]) };
-          return characteristic;
-        },
-      };
-    },
-  };
-  device.gatt = gatt;
-  const nav = Object.getOwnPropertyDescriptor(globalThis, "navigator"),
-    win = Object.getOwnPropertyDescriptor(globalThis, "window");
-  Object.defineProperty(globalThis, "navigator", {
-    configurable: true,
-    value: { bluetooth: { requestDevice: async () => device } },
+  const device = mockDevice("Fixture Trainer", async (uuid) => {
+    if (uuid === U.FITNESS_MACHINE_FEATURE)
+      return { readValue: async () => packet([1, 0, 0, 0, 0, 0, 0, 0]) };
+    return characteristic;
   });
-  Object.defineProperty(globalThis, "window", {
-    configurable: true,
-    value: { isSecureContext: true, navigator: globalThis.navigator },
-  });
+  const restoreBrowser = installBrowserMock(device);
   try {
     const trainer = new BluetoothTrainerSource();
     let watts = 0;
@@ -239,10 +257,7 @@ test("mock GATT discovery, notifications, disconnect and manual reconnect", asyn
     assert.equal(trainer.state, "error");
     assert.match(trainer.error, /cancelled/);
   } finally {
-    if (nav) Object.defineProperty(globalThis, "navigator", nav);
-    else Reflect.deleteProperty(globalThis, "navigator");
-    if (win) Object.defineProperty(globalThis, "window", win);
-    else Reflect.deleteProperty(globalThis, "window");
+    restoreBrowser();
   }
 });
 
@@ -265,41 +280,16 @@ test("FTMS control writes use acknowledged control-point transactions", async ()
   }
   const telemetry = new Characteristic(U.INDOOR_BIKE_DATA);
   const control = new Characteristic(U.FITNESS_MACHINE_CONTROL_POINT);
-  const device = new EventTarget() as EventTarget & {
-    name: string;
-    gatt: unknown;
-  };
-  device.name = "Control Fixture";
-  const gatt = {
-    connect: async () => gatt,
-    disconnect: () => {},
-    getPrimaryService: async (uuid: string) => {
-      if (uuid !== U.FTMS_SERVICE) throw new Error("No CPS");
+  const device = mockDevice("Control Fixture", async (uuid) => {
+    if (uuid === U.FITNESS_MACHINE_FEATURE)
       return {
-        getCharacteristic: async (uuid: string) => {
-          if (uuid === U.FITNESS_MACHINE_FEATURE) {
-            return {
-              readValue: async () => packet([0, 0, 0, 0, 4, 0x20, 0, 0]),
-            };
-          }
-          if (uuid === U.FITNESS_MACHINE_CONTROL_POINT) return control;
-          if (uuid === U.INDOOR_BIKE_DATA) return telemetry;
-          throw new Error("Optional characteristic unavailable");
-        },
+        readValue: async () => packet([0, 0, 0, 0, 4, 0x20, 0, 0]),
       };
-    },
-  };
-  device.gatt = gatt;
-  const nav = Object.getOwnPropertyDescriptor(globalThis, "navigator");
-  const win = Object.getOwnPropertyDescriptor(globalThis, "window");
-  Object.defineProperty(globalThis, "navigator", {
-    configurable: true,
-    value: { bluetooth: { requestDevice: async () => device } },
+    if (uuid === U.FITNESS_MACHINE_CONTROL_POINT) return control;
+    if (uuid === U.INDOOR_BIKE_DATA) return telemetry;
+    throw new Error("Optional characteristic unavailable");
   });
-  Object.defineProperty(globalThis, "window", {
-    configurable: true,
-    value: { isSecureContext: true, navigator: globalThis.navigator },
-  });
+  const restoreBrowser = installBrowserMock(device);
   try {
     const trainer = new BluetoothTrainerSource();
     await trainer.connect();
@@ -309,10 +299,7 @@ test("FTMS control writes use acknowledged control-point transactions", async ()
     assert.deepEqual(control.writes.slice(0, 2), [[0x00], [0x04, 42, 0]]);
     await trainer.disconnect();
   } finally {
-    if (nav) Object.defineProperty(globalThis, "navigator", nav);
-    else Reflect.deleteProperty(globalThis, "navigator");
-    if (win) Object.defineProperty(globalThis, "window", win);
-    else Reflect.deleteProperty(globalThis, "window");
+    restoreBrowser();
   }
 });
 

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type MouseEvent } from "react";
 import { lookupRoute } from "@/game/route/route";
 import type { CyclingRoute } from "@/types";
 import styles from "./RouteMinimap.module.css";
@@ -6,16 +6,34 @@ import styles from "./RouteMinimap.module.css";
 export default function RouteMinimap({
   route,
   distanceMeters,
+  onSeek,
 }: {
   route: CyclingRoute;
   distanceMeters: number;
+  onSeek?: (distanceMeters: number) => void;
 }) {
   const map = useMemo(() => {
     let minX = Infinity,
       maxX = -Infinity,
       minZ = Infinity,
       maxZ = -Infinity;
-    for (const p of route.points) {
+    const spacing = Math.max(2.5, Math.min(8, route.distanceMeters / 900));
+    const samples: Array<{
+      x: number;
+      y: number;
+      z: number;
+      distanceMeters: number;
+    }> = [];
+    for (let distance = 0; distance < route.distanceMeters; distance += spacing)
+      samples.push({
+        ...lookupRoute(distance, route),
+        distanceMeters: distance,
+      });
+    samples.push({
+      ...lookupRoute(route.distanceMeters, route),
+      distanceMeters: route.distanceMeters,
+    });
+    for (const p of samples) {
       minX = Math.min(minX, p.x);
       maxX = Math.max(maxX, p.x);
       minZ = Math.min(minZ, p.z);
@@ -29,24 +47,55 @@ export default function RouteMinimap({
       x: 120 + (x - (minX + maxX) / 2) * scale,
       y: 80 - (z - (minZ + maxZ) / 2) * scale,
     });
-    // Keep every reference sample: crossings and hairpins retain their topology.
-    const path = route.points
+    const path = samples
       .map((p, i) => {
         const point = project(p.x, p.z);
         return `${i ? "L" : "M"}${point.x.toFixed(2)},${point.y.toFixed(2)}`;
       })
       .join(" ");
-    const first = route.points[0],
-      last = route.points.at(-1)!;
+    const first = samples[0],
+      last = samples.at(-1)!;
     return {
       project,
       path,
       start: project(first.x, first.z),
       finish: project(last.x, last.z),
+      samples,
     };
   }, [route]);
   const position = lookupRoute(distanceMeters, route);
   const rider = map.project(position.x, position.z);
+  const seekFromClick = (event: MouseEvent<SVGSVGElement>) => {
+    if (!onSeek) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - bounds.left) / bounds.width) * 240;
+    const y = ((event.clientY - bounds.top) / bounds.height) * 160;
+    let nearestDistance = 0;
+    let nearestDistanceSquared = Infinity;
+    for (let i = 0; i < map.samples.length - 1; i++) {
+      const a = map.project(map.samples[i].x, map.samples[i].z);
+      const b = map.project(map.samples[i + 1].x, map.samples[i + 1].z);
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const lengthSquared = dx * dx + dy * dy;
+      const t = lengthSquared
+        ? Math.max(
+            0,
+            Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / lengthSquared),
+          )
+        : 0;
+      const distanceSquared =
+        (x - (a.x + t * dx)) ** 2 + (y - (a.y + t * dy)) ** 2;
+      if (distanceSquared < nearestDistanceSquared) {
+        nearestDistanceSquared = distanceSquared;
+        nearestDistance =
+          map.samples[i].distanceMeters +
+          (map.samples[i + 1].distanceMeters - map.samples[i].distanceMeters) *
+            t;
+      }
+    }
+    onSeek(nearestDistance);
+  };
   return (
     <aside className={styles.map} aria-label="Route minimap">
       <div className={styles.heading}>
@@ -57,6 +106,8 @@ export default function RouteMinimap({
         viewBox="0 0 240 160"
         role="img"
         aria-label={`${route.name} route map`}
+        onClick={seekFromClick}
+        className={onSeek ? styles.interactive : undefined}
       >
         <path
           d={map.path}
@@ -100,6 +151,7 @@ export default function RouteMinimap({
           />
         </g>
       </svg>
+      {onSeek && <small className={styles.seekHint}>CLICK ROUTE TO JUMP</small>}
     </aside>
   );
 }

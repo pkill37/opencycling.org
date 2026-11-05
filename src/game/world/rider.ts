@@ -1,5 +1,6 @@
 import * as T from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { createTexturedGeometry } from "./geometry";
 
 const v = (x: number, y: number, z: number) => new T.Vector3(x, y, z);
 const up = v(0, 1, 0);
@@ -49,12 +50,7 @@ function sculpt(sections: Section[], sides = 20) {
       }
     }
   });
-  const geometry = new T.BufferGeometry();
-  geometry.setAttribute("position", new T.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute("uv", new T.Float32BufferAttribute(uvs, 2));
-  geometry.setIndex(indices);
-  geometry.computeVertexNormals();
-  return geometry;
+  return createTexturedGeometry(positions, uvs, indices);
 }
 
 function jerseyTexture() {
@@ -105,15 +101,17 @@ export function createRider() {
     color: 0x171919,
     roughness: 0.95,
   });
-  const paint = new T.MeshStandardMaterial({
-    color: 0x8dafa4,
+  const paint = new T.MeshPhysicalMaterial({
+    color: 0x75b9a7,
     metalness: 0.55,
     roughness: 0.25,
+    clearcoat: 0.8,
+    clearcoatRoughness: 0.16,
   });
-  const metal = new T.MeshStandardMaterial({
-    color: 0xabb2b5,
-    metalness: 0.8,
-    roughness: 0.26,
+  const accent = new T.MeshStandardMaterial({
+    color: 0xd9f77e,
+    metalness: 0.35,
+    roughness: 0.28,
   });
   const skin = new T.MeshStandardMaterial({ color: 0xb98465, roughness: 0.8 });
   const kit = new T.MeshStandardMaterial({
@@ -134,6 +132,10 @@ export function createRider() {
     color: 0x314946,
     metalness: 0.65,
     roughness: 0.15,
+  });
+  const glove = new T.MeshStandardMaterial({
+    color: 0x202b2c,
+    roughness: 0.75,
   });
   const sphere = new T.SphereGeometry(1, 20, 12);
   const add = (
@@ -204,24 +206,8 @@ export function createRider() {
   for (const z of [-0.54, 0.54]) {
     const wheel = new T.Group();
     wheel.position.set(0, 0.34, z);
-    const tire = add(wheel, new T.TorusGeometry(0.319, 0.021, 8, 48), rubber);
+    const tire = add(wheel, new T.TorusGeometry(0.319, 0.025, 6, 28), rubber);
     tire.rotation.y = Math.PI / 2;
-    const rim = add(wheel, new T.TorusGeometry(0.295, 0.017, 6, 48), carbon);
-    rim.rotation.y = Math.PI / 2;
-    for (let i = 0; i < 16; i++) {
-      const angle = (i / 16) * Math.PI * 2;
-      tube(
-        wheel,
-        v(i % 2 ? -0.022 : 0.022, 0, 0),
-        v(0, Math.sin(angle) * 0.29, Math.cos(angle) * 0.29),
-        0.0025,
-        metal,
-      );
-    }
-    tube(wheel, v(-0.04, 0, 0), v(0.04, 0, 0), 0.02, metal);
-    const disc = add(wheel, new T.TorusGeometry(0.072, 0.006, 4, 24), metal);
-    disc.rotation.y = Math.PI / 2;
-    disc.position.x = -0.036;
     group.add(wheel);
     wheels.push(wheel);
   }
@@ -247,54 +233,8 @@ export function createRider() {
   ellipsoid(bike, v(0, 0.965, -0.24), v(0.072, 0.025, 0.14), carbon);
   tube(bike, headTube, v(0, 0.94, 0.41), 0.015, carbon);
   tube(bike, v(0, 0.94, 0.41), v(0, 0.965, 0.51), 0.018, carbon);
-  tube(bike, v(-0.21, 0.965, 0.51), v(0.21, 0.965, 0.51), 0.015, carbon);
-  for (const side of [-1, 1]) {
-    curveTube(
-      bike,
-      [
-        v(side * 0.21, 0.965, 0.51),
-        v(side * 0.21, 0.96, 0.61),
-        v(side * 0.21, 0.86, 0.64),
-        v(side * 0.21, 0.82, 0.51),
-      ],
-      0.018,
-      rubber,
-    );
-    ellipsoid(
-      bike,
-      v(side * 0.21, 0.985, 0.555),
-      v(0.024, 0.035, 0.052),
-      rubber,
-    );
-    tube(
-      bike,
-      v(side * 0.215, 0.94, 0.6),
-      v(side * 0.215, 0.85, 0.58),
-      0.007,
-      metal,
-    );
-  }
-  const bottle = add(
-    bike,
-    new T.CylinderGeometry(0.032, 0.029, 0.16, 12),
-    white,
-  );
-  bottle.position.set(0, 0.53, 0.13);
-  bottle.rotation.x = -0.6;
-  ellipsoid(bike, v(0, 0.61, 0.085), v(0.018, 0.018, 0.018), carbon);
-  for (const offset of [-0.09, 0.09])
-    tube(
-      bike,
-      v(0.073, 0.3 + offset, -0.06),
-      v(0.073, 0.34 + offset * 0.35, -0.54),
-      0.003,
-      metal,
-    );
-  const chainring = add(bike, new T.TorusGeometry(0.092, 0.008, 6, 32), metal);
-  chainring.rotation.y = Math.PI / 2;
-  chainring.position.copy(crankCenter);
-  chainring.position.x = 0.072;
-
+  tube(bike, v(0, 0.965, 0.49), v(0, 1.015, 0.55), 0.011, accent);
+  tube(bike, v(-0.21, 0.965, 0.51), v(0.21, 0.965, 0.51), 0.018, carbon);
   const torso = add(
     body,
     sculpt(
@@ -364,6 +304,9 @@ export function createRider() {
     curveTube(body, points, rib === 0 ? 0.016 : 0.011, shell, 18);
   }
   ellipsoid(body, v(0, 1.575, 0.167), v(0.035, 0.025, 0.014), rubber);
+  const jerseyZip = add(body, new T.BoxGeometry(0.008, 0.29, 0.01), white);
+  jerseyZip.position.set(0, 1.27, 0.16);
+  jerseyZip.rotation.x = 0.94;
 
   for (const side of [-1, 1]) {
     const shoulder = v(side * 0.195, 1.31, 0.17),
@@ -408,7 +351,7 @@ export function createRider() {
       body,
       wrist.clone().add(v(0, -0.015, 0.022)),
       v(0.031, 0.025, 0.048),
-      bib,
+      glove,
     );
     ellipsoid(body, v(side * 0.192, 0.975, 0.575), v(0.016, 0.02, 0.028), skin);
   }
@@ -468,7 +411,7 @@ export function createRider() {
     const crank = add(
       group,
       new T.CylinderGeometry(0.009, 0.013, crankLength, 8),
-      metal,
+      carbon,
     );
     crank.geometry.translate(0, crankLength / 2, 0);
     const pedal = add(group, new T.BoxGeometry(0.07, 0.015, 0.05), carbon);

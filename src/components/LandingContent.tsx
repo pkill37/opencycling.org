@@ -9,6 +9,11 @@ export function LandingIntro() {
         simulator. OpenCycling.org is an open source indoor cycling game, free
         to play with no account needed.
       </p>
+      <div className={styles.introMeta} aria-label="OpenCycling benefits">
+        <span>NO ACCOUNT</span>
+        <span>RUNS LOCALLY</span>
+        <span>OPEN SOURCE</span>
+      </div>
     </>
   );
 }
@@ -89,7 +94,8 @@ export function LandingGuide() {
           Check the Bluetooth availability message in setup, wake your trainer
           and keep it nearby. Close other apps connected to the trainer, check
           site permissions and try connecting again. You can also review the
-          Bluetooth diagnostics in setup or use the simulator to try a ride.
+          connection details below the Bluetooth trainer control or use the
+          simulator to try a ride.
         </p>
       </details>
       <details>
@@ -106,6 +112,17 @@ export function LandingGuide() {
           Trainer telemetry and cycling simulation stay in your browser.
           OpenCycling.org has no backend and does not upload your Bluetooth
           device or ride data.
+        </p>
+      </details>
+      <details>
+        <summary>What terrain data does OpenCycling.org use?</summary>
+        <p>
+          <a href="https://registry.opendata.aws/terrain-tiles/">
+            Terrain: Mapzen
+          </a>{" "}
+          · SRTM courtesy of USGS · Produced using Copernicus data and
+          information funded by the European Union — EU-DEM layers. Surrounding
+          terrain only; road elevations unchanged.
         </p>
       </details>
       <a href="/ride/">Set up a virtual cycling ride</a>

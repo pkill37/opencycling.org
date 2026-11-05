@@ -1,5 +1,18 @@
 import { startRide } from "./helpers";
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+
+async function prepareImportedRide(page: Page, name: string, gpx: string) {
+  await page.goto("/ride/");
+  await page.getByText("Debug settings", { exact: true }).click();
+  await page.getByText("Import GPX or route package", { exact: true }).click();
+  await page.getByLabel("Route file").setInputFiles({
+    name,
+    mimeType: "application/gpx+xml",
+    buffer: Buffer.from(gpx),
+  });
+  await page.getByRole("button", { name: "Validate selected segment" }).click();
+}
+
 test.beforeEach(async ({ page }, testInfo) => {
   if (testInfo.title.startsWith("FTMS browser")) return;
   await page.addInitScript(() => {
@@ -11,24 +24,18 @@ test.beforeEach(async ({ page }, testInfo) => {
 });
 
 test("GPX validation, preview and selected-course riding", async ({ page }) => {
-  await page.goto("/ride/");
-  await page.getByText("Debug settings", { exact: true }).click();
-  await page.getByText("Import GPX or route package", { exact: true }).click();
-  await page.getByLabel("Route file").setInputFiles({
-    name: "test.gpx",
-    mimeType: "application/gpx+xml",
-    buffer: Buffer.from(
-      '<gpx><trk><name>Imported ascent</name><trkseg><trkpt lat="45" lon="6"><ele>700</ele></trkpt><trkpt lat="45.001" lon="6"><ele>710</ele></trkpt><trkpt lat="45.002" lon="6"><ele>720</ele></trkpt></trkseg></trk></gpx>',
-    ),
-  });
-  await page.getByRole("button", { name: "Validate selected segment" }).click();
+  await prepareImportedRide(
+    page,
+    "test.gpx",
+    '<gpx><trk><name>Imported ascent</name><trkseg><trkpt lat="45" lon="6"><ele>700</ele></trkpt><trkpt lat="45.001" lon="6"><ele>710</ele></trkpt><trkpt lat="45.002" lon="6"><ele>720</ele></trkpt></trkseg></trk></gpx>',
+  );
   await expect(
     page.getByText("Imported ascent · 3 samples · unverified"),
   ).toBeVisible();
   await expect(page.locator("canvas")).toHaveCount(0);
   await page.getByRole("button", { name: "Use reviewed preview" }).click();
-  await expect(page.getByRole("button", { name: "Start ride" })).toBeEnabled();
-  await page.getByRole("button", { name: "Start ride" }).click();
+  await expect(page.getByRole("button", { name: "Start" })).toBeEnabled();
+  await page.getByRole("button", { name: "Start" }).click();
   await expect(page.locator("canvas")).toBeVisible();
   await expect(
     page.getByRole("img", { name: "Imported ascent elevation profile" }),
@@ -46,20 +53,14 @@ test("GPX validation, preview and selected-course riding", async ({ page }) => {
 test("completed ride retains its live world under the green summary overlay", async ({
   page,
 }) => {
-  await page.goto("/ride/");
-  await page.getByText("Debug settings", { exact: true }).click();
-  await page.getByText("Import GPX or route package", { exact: true }).click();
-  await page.getByLabel("Route file").setInputFiles({
-    name: "finish.gpx",
-    mimeType: "application/gpx+xml",
-    buffer: Buffer.from(
-      '<gpx><trk><name>Finish fixture</name><trkseg><trkpt lat="45" lon="6"><ele>700</ele></trkpt><trkpt lat="45.00005" lon="6"><ele>700</ele></trkpt></trkseg></trk></gpx>',
-    ),
-  });
-  await page.getByRole("button", { name: "Validate selected segment" }).click();
+  await prepareImportedRide(
+    page,
+    "finish.gpx",
+    '<gpx><trk><name>Finish fixture</name><trkseg><trkpt lat="45" lon="6"><ele>700</ele></trkpt><trkpt lat="45.00005" lon="6"><ele>700</ele></trkpt></trkseg></trk></gpx>',
+  );
   await page.getByRole("button", { name: "Use reviewed preview" }).click();
-  await expect(page.getByRole("button", { name: "Start ride" })).toBeEnabled();
-  await page.getByRole("button", { name: "Start ride" }).click();
+  await expect(page.getByRole("button", { name: "Start" })).toBeEnabled();
+  await page.getByRole("button", { name: "Start" }).click();
   const canvas = page.locator("canvas");
   await expect(canvas).toBeVisible();
   await canvas.evaluate((el) => el.setAttribute("data-original-world", "true"));
@@ -163,7 +164,7 @@ test("phone simulator touch controls remain usable", async ({ page }) => {
 
 test("mouse orbit and wheel zoom control the ride camera", async ({ page }) => {
   await page.goto("/ride/");
-  await page.getByRole("button", { name: "Start ride" }).click();
+  await page.getByRole("button", { name: "Start" }).click();
   const canvas = page.locator("canvas");
   await expect(canvas).toBeVisible();
   await page.getByRole("button", { name: "Pause", exact: true }).click();
@@ -244,7 +245,7 @@ test("FTMS browser notifications drive the ride and disconnect offers reconnect"
     });
   });
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Start ride" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Start" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Use simulator" })).toHaveCount(
     0,
   );

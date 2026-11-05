@@ -1,4 +1,4 @@
-import { terrainRelief } from "./noise";
+import { terrainDetail, terrainNoise, terrainRelief } from "./noise";
 import type { ElevationSampler } from "../route/terrain";
 import type { CyclingRoute } from "../../types";
 import { projectGeographic } from "../route/package";
@@ -13,12 +13,58 @@ export interface SceneryItem extends Position {
   y: number;
   scale: number;
   rotation: number;
+  pitch?: number;
   kind: "pine" | "broadleaf" | "rock" | "building" | "lamp";
 }
 export interface Landmark extends Position {
   kind: "arc" | "obelisk" | "harbour";
   y: number;
   rotation: number;
+}
+
+function indexPath(points: Position[], cellSize: number) {
+  const cells = new Map<string, number[]>();
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i],
+      b = points[i + 1];
+    for (
+      let x = Math.floor(Math.min(a.x, b.x) / cellSize);
+      x <= Math.floor(Math.max(a.x, b.x) / cellSize);
+      x++
+    )
+      for (
+        let z = Math.floor(Math.min(a.z, b.z) / cellSize);
+        z <= Math.floor(Math.max(a.z, b.z) / cellSize);
+        z++
+      ) {
+        const key = `${x},${z}`;
+        const list = cells.get(key) ?? [];
+        list.push(i);
+        cells.set(key, list);
+      }
+  }
+  return cells;
+}
+
+function nearbyPathSegments(
+  cells: Map<string, number[]>,
+  cache: Map<string, Set<number>>,
+  x: number,
+  z: number,
+  cellSize: number,
+) {
+  const cx = Math.floor(x / cellSize),
+    cz = Math.floor(z / cellSize),
+    key = `${cx},${cz}`;
+  const cached = cache.get(key);
+  if (cached) return cached;
+  const result = new Set<number>();
+  for (let dx = -3; dx <= 3; dx++)
+    for (let dz = -3; dz <= 3; dz++)
+      for (const index of cells.get(`${cx + dx},${cz + dz}`) ?? [])
+        result.add(index);
+  cache.set(key, result);
+  return result;
 }
 
 const profiles = [
@@ -158,46 +204,60 @@ export function createLandscape(
 
   // Index every segment into metric cells, including long segments. Queries consider
   // all nearby passages, rather than only the rider's current switchback/lap.
+  const sampleSpacing = Math.max(2.5, Math.min(8, route.distanceMeters / 2000));
+  const routeSamples: ReturnType<typeof lookupRoute>[] = [];
+  for (
+    let distance = 0;
+    distance < route.distanceMeters;
+    distance += sampleSpacing
+  )
+    routeSamples.push(lookupRoute(distance, route));
+  routeSamples.push(lookupRoute(route.distanceMeters, route));
   const cellSize = 100;
-  const cells = new Map<string, number[]>();
-  for (let i = 0; i < route.points.length - 1; i++) {
-    const a = route.points[i],
-      b = route.points[i + 1];
-    for (
-      let x = Math.floor(Math.min(a.x, b.x) / cellSize);
-      x <= Math.floor(Math.max(a.x, b.x) / cellSize);
-      x++
-    ) {
-      for (
-        let z = Math.floor(Math.min(a.z, b.z) / cellSize);
-        z <= Math.floor(Math.max(a.z, b.z) / cellSize);
-        z++
-      ) {
-        const key = `${x},${z}`;
-        const list = cells.get(key) ?? [];
-        list.push(i);
-        cells.set(key, list);
-      }
-    }
-  }
-  const candidateCache = new Map<string, Set<number>>();
-  const nearby = (x: number, z: number) => {
-    const cx = Math.floor(x / cellSize),
-      cz = Math.floor(z / cellSize);
-    const key = `${cx},${cz}`;
-    const cached = candidateCache.get(key);
-    if (cached) return cached;
-    const result = new Set<number>();
-    for (let dx = -3; dx <= 3; dx++)
-      for (let dz = -3; dz <= 3; dz++) {
-        for (const index of cells.get(`${cx + dx},${cz + dz}`) ?? [])
-          result.add(index);
-      }
-    candidateCache.set(key, result);
-    return result;
-  };
-  const segments = route.points.slice(0, -1).map((a, i) => {
+  const sourceSegments = route.points.slice(0, -1).map((a, i) => {
     const b = route.points[i + 1],
+      dx = b.x - a.x,
+      dz = b.z - a.z;
+    return { a, dx, dz, dy: b.y - a.y, length2: dx * dx + dz * dz };
+  });
+  const sourceCells = indexPath(route.points, cellSize);
+  const cells = indexPath(routeSamples, cellSize);
+  const candidateCache = new Map<string, Set<number>>();
+  const sourceCandidateCache = new Map<string, Set<number>>();
+  const nearbySource = (x: number, z: number) => {
+    return nearbyPathSegments(
+      sourceCells,
+      sourceCandidateCache,
+      x,
+      z,
+      cellSize,
+    );
+  };
+  const sourceDeckAt = (x: number, z: number) => {
+    let deck = Infinity;
+    for (const i of nearbySource(x, z)) {
+      const segment = sourceSegments[i];
+      if (segment.length2 === 0) continue;
+      const t = Math.max(
+        0,
+        Math.min(
+          1,
+          ((x - segment.a.x) * segment.dx + (z - segment.a.z) * segment.dz) /
+            segment.length2,
+        ),
+      );
+      const ex = x - segment.a.x - t * segment.dx,
+        ez = z - segment.a.z - t * segment.dz;
+      if (ex * ex + ez * ez < 36)
+        deck = Math.min(deck, segment.a.y + t * segment.dy);
+    }
+    return deck;
+  };
+  const nearby = (x: number, z: number) => {
+    return nearbyPathSegments(cells, candidateCache, x, z, cellSize);
+  };
+  const segments = routeSamples.slice(0, -1).map((a, i) => {
+    const b = routeSamples[i + 1],
       dx = b.x - a.x,
       dz = b.z - a.z;
     const length2 = dx * dx + dz * dz;
@@ -265,10 +325,19 @@ export function createLandscape(
     (_, i) => i % Math.max(1, Math.ceil(route.points.length / 128)) === 0,
   );
   const heightAt = (x: number, z: number, road = roadAt(x, z)) => {
+    const sourceDeck = sourceDeckAt(x, z);
     const measured = elevation?.(x, z);
-    if (measured !== undefined && road.distance >= 40) return measured;
+    if (measured !== undefined && road.distance >= 40)
+      return Math.min(measured, sourceDeck - 0.24);
     const relief =
-      region === "alpine" ? 12 : region === "mediterranean" ? 3 : 0.5;
+      region === "alpine"
+        ? 15
+        : region === "mediterranean"
+          ? 3.8
+          : region === "paris"
+            ? 0.8
+            : 1.2;
+    const detail = terrainDetail(x, z);
     const ripple = terrainRelief(x, z) * relief;
     const blend = Math.min(1, Math.max(0, (road.distance - 6) / 100));
     let sum = 0,
@@ -281,14 +350,26 @@ export function createLandscape(
     const farHeight = weights ? sum / weights : start.y;
     const local = Math.max(0, 1 - road.distance / 250);
     const base = farHeight * (1 - local) + road.blendedY * local;
-    const procedural = base - 0.14 + ripple * blend;
+    const slopeRelief =
+      region === "alpine" ? Math.abs(detail) * 1.8 : Math.abs(detail) * 0.35;
+    // Fine-scale breakup makes the rendered ground feel naturally irregular
+    // between the route and the larger measured terrain features. It fades out
+    // at the road edge so the ride surface remains visually clean and exact.
+    const microRelief =
+      terrainNoise(x / 7, z / 7) * (region === "alpine" ? 0.55 : 0.16);
+    const procedural =
+      base -
+      0.14 +
+      ripple * blend +
+      slopeRelief * Math.sign(detail) * blend +
+      microRelief * blend;
     const transition = Math.min(1, Math.max(0, (road.distance - 6) / 34));
     const smooth = transition * transition * (3 - 2 * transition);
     const y =
       measured === undefined
         ? procedural
         : procedural * (1 - smooth) + measured * smooth;
-    return Math.min(y, road.nearbyDeck - 0.12);
+    return Math.min(y, road.nearbyDeck - 0.24, sourceDeck - 0.24);
   };
   const landmarks: Landmark[] = [];
   const addLandmark = (

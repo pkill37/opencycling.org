@@ -65,6 +65,21 @@ export class RideEngine {
       void control?.releaseControl?.();
     }
   }
+  seek(distanceMeters: number) {
+    const distance = Math.max(
+      0,
+      Math.min(distanceMeters, this.course.distanceMeters),
+    );
+    const position = lookupRoute(distance, this.course);
+    this.state.distanceMeters = distance;
+    this.state.elevationMeters = position.elevationMeters;
+    this.state.gradient = position.gradient;
+    this.state.braking = false;
+    this.state.targetSpeedMetersPerSecond = undefined;
+    this.completed = distance >= this.course.distanceMeters;
+    if (this.completed) this.state.speedMetersPerSecond = 0;
+    this.accumulator = 0;
+  }
   enableTrainerControl(enabled: boolean) {
     this.trainerControl = enabled;
     if (enabled) this.controlWarning = "";

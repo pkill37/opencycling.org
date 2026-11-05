@@ -142,7 +142,7 @@ test("landing page stays static, stable and within its script budget", async ({
   // The ride renderer is lazy-loaded, but its richer world bundle is included
   // in the browser's decoded script accounting after route prefetching.
   expect(metrics.scriptBytes).toBeLessThan(750_000);
-  await page.getByRole("button", { name: "Start ride" }).click();
+  await page.getByRole("button", { name: "Start" }).click();
   await expect(page.locator("canvas")).toBeVisible();
 });
 
@@ -157,7 +157,7 @@ test("mobile landing page fits without horizontal scrolling", async ({
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
-  await expect(page.getByRole("button", { name: "Start ride" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Start" })).toBeEnabled();
   const lastCourse = await page
     .getByRole("button", { name: "Select Paris", exact: true })
     .boundingBox();
@@ -187,7 +187,7 @@ test("WebGL failure produces an actionable error and a paused ride", async ({
     } as typeof original;
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "Start ride" }).click();
+  await page.getByRole("button", { name: "Start" }).click();
   await expect(page.locator("main").getByRole("alert")).toContainText(
     "Enable hardware acceleration",
   );
@@ -202,9 +202,9 @@ test("failed scene download clears loading and reports recovery", async ({
 }) => {
   await page.goto("/");
   await expect(page.getByText("Checking Bluetooth support…")).toBeHidden();
-  await expect(page.getByRole("button", { name: "Start ride" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Start" })).toBeEnabled();
   await page.route("**/*.js", (route) => route.abort());
-  await page.getByRole("button", { name: "Start ride" }).click();
+  await page.getByRole("button", { name: "Start" }).click();
   await expect(page.locator("main").getByRole("alert")).toContainText(
     "Reload to try again",
   );
@@ -218,7 +218,7 @@ test("game menu selects bundled courses before starting a ride", async ({
   page,
 }) => {
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Start ride" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Start" })).toBeEnabled();
   for (const name of ["Marseille", "Paris", "Alpe d’Huez"]) {
     const card = page.getByRole("button", {
       name: `Select ${name}`,
@@ -226,9 +226,7 @@ test("game menu selects bundled courses before starting a ride", async ({
     });
     await card.click();
     await expect(card).toHaveAttribute("aria-pressed", "true");
-    await expect(
-      page.getByRole("button", { name: "Start ride" }),
-    ).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Start" })).toBeEnabled();
     await expect(page.locator("canvas")).toHaveCount(0);
   }
 });

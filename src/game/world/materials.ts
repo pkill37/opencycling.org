@@ -43,7 +43,7 @@ export function createWorldMaterials(
     );
     texture.colorSpace = T.SRGBColorSpace;
     texture.wrapS = texture.wrapT = T.RepeatWrapping;
-    texture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+    texture.anisotropy = Math.min(2, renderer.capabilities.getMaxAnisotropy());
     textures.add(texture);
   };
   const road = standard({ color: 0xb0b0aa, roughness: 0.96 });
@@ -78,7 +78,7 @@ export function createWorldMaterials(
     reliefContext.putImageData(pixels, 0, 0);
     const bump = new T.CanvasTexture(reliefCanvas);
     bump.wrapS = bump.wrapT = T.RepeatWrapping;
-    bump.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    bump.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
     textures.add(bump);
     for (const material of [road, gravel, grass]) {
       material.bumpMap = bump;
@@ -141,6 +141,18 @@ export function createWorldMaterials(
   });
   const roof = standard({ map: pattern("roof"), roughness: 0.9 });
   const dark = standard({ color: 0x39443e, roughness: 0.8 });
+  const trunk = standard({
+    color: region === "mediterranean" ? 0x6d4d32 : 0x594535,
+    roughness: 1,
+  });
+  const pineFoliage = standard({
+    color: region === "alpine" ? 0x315747 : 0x456b50,
+    roughness: 0.94,
+  });
+  const broadleafFoliage = standard({
+    color: region === "mediterranean" ? 0x6c8759 : 0x54795d,
+    roughness: 0.92,
+  });
   const rock = standard({
     color: region === "mediterranean" ? 0xc7bda4 : 0x97998d,
     roughness: 1,
@@ -186,15 +198,17 @@ ${shader.fragmentShader}`.replace(
       diffuseColor *= surfaceMap;
       #endif
       float slope = 1.0 - abs(normalize(terrainNormal).y);
-      float broad = surfaceNoise(terrainPosition * 0.018) * 2.0 - 1.0;
+      float broad = surfaceNoise(terrainPosition * 0.010) * 2.0 - 1.0;
       float detailFade = 1.0 - smoothstep(0.15, 0.65, length(fwidth(terrainPosition)));
-      float grain = (surfaceNoise(terrainPosition * 3.0) - 0.5) * 0.16 * detailFade;
-      float strata = surfaceNoise(terrainPosition * vec3(0.13, 0.9, 0.13));
-      float stone = smoothstep(0.12, 0.48, slope);
-      ${region === "alpine" ? "stone = max(stone, smoothstep(1450.0, 2100.0, terrainPosition.y) * 0.75);" : ""}
-      vec3 rockTone = vec3(0.43, 0.42, 0.37) * (0.85 + grain + strata * 0.3 + broad * 0.12);
-      vec3 soilTone = vec3(0.38, 0.30, 0.20);
-      diffuseColor.rgb = mix(diffuseColor.rgb * (1.0 + broad * 0.12), soilTone, smoothstep(0.3, 0.9, broad) * 0.22);
+      float grain = (surfaceNoise(terrainPosition * 2.8) - 0.5) * 0.18 * detailFade;
+      float strata = surfaceNoise(terrainPosition * vec3(0.09, 0.72, 0.09));
+      float stone = smoothstep(0.2, 0.72, slope);
+      float soil = smoothstep(0.35, 0.85, broad + strata * 0.24);
+      ${region === "alpine" ? "stone = max(stone, smoothstep(1320.0, 2050.0, terrainPosition.y) * 0.82);" : ""}
+      vec3 rockTone = vec3(0.43, 0.42, 0.37) * (0.82 + grain + strata * 0.28 + broad * 0.15);
+      vec3 soilTone = vec3(0.38, 0.30, 0.20) * (0.86 + grain * 0.7 + broad * 0.12);
+      diffuseColor.rgb *= 1.0 + broad * 0.16 + grain;
+      diffuseColor.rgb = mix(diffuseColor.rgb, soilTone, soil * 0.24);
       diffuseColor.rgb = mix(diffuseColor.rgb, rockTone, stone);`,
       );
   };
@@ -246,6 +260,9 @@ ${shader.fragmentShader}`.replace(
     stone,
     roof,
     dark,
+    trunk,
+    pineFoliage,
+    broadleafFoliage,
     rock,
     water,
     update(dt: number) {

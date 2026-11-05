@@ -1,6 +1,7 @@
 import type { TerrainTileData } from "./terrain-data";
 import type { ElevationSampler } from "../route/terrain";
 import * as T from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import type { CyclingRoute } from "../../types";
 import { lookupRoute } from "../route/route";
 import { createLandscape, type Landscape, type SceneryItem } from "./landscape";
@@ -115,9 +116,11 @@ export function addTerrain(
                 ? 0xc2bdb0
                 : 0xc4cfad,
         );
-        color.multiplyScalar(
-          0.94 + Math.sin(x * 0.02) * Math.cos(z * 0.017) * 0.06,
-        );
+        const slope = Math.min(1, Math.abs(road.y - height) / 7);
+        const regionalVariation =
+          Math.sin(x * 0.013 + z * 0.007) * 0.035 +
+          Math.cos(x * 0.004 - z * 0.019) * 0.025;
+        color.multiplyScalar(0.94 + regionalVariation - slope * 0.025);
         colors.push(color.r, color.g, color.b);
         uvs.push(x / 14, z / 14);
       }
@@ -414,14 +417,18 @@ function instantiate(
     const marker = new T.Object3D();
     batch.forEach((item, index) => {
       marker.position.set(item.x, item.y, item.z);
-      marker.rotation.set(0, item.rotation, 0);
+      if (item.pitch === undefined) marker.rotation.set(0, item.rotation, 0);
+      else marker.rotation.set(item.pitch, item.rotation, 0, "YXZ");
       marker.scale.setScalar(item.scale);
       transform(item, marker);
       marker.updateMatrix();
       mesh.setMatrixAt(index, marker.matrix);
     });
     mesh.computeBoundingSphere();
-    mesh.castShadow = true;
+    // Scenery is static and numerous. Let the rider and landmarks cast the
+    // dynamic shadow; including every roadside batch in the shadow pass causes
+    // large frame-time spikes when the sun follows the rider.
+    mesh.castShadow = false;
     mesh.receiveShadow = true;
     mesh.userData.centerX =
       batch.reduce((sum, item) => sum + item.x, 0) / batch.length;
@@ -434,16 +441,50 @@ function instantiate(
 function addProps(root: T.Group, land: Landscape, m: WorldMaterials) {
   for (const kind of ["pine", "broadleaf"] as const) {
     const items = land.items.filter((item) => item.kind === kind);
-    // Crossed alpha-tested cards have volume from both ride cameras and orbit views.
-    for (const angle of [0, Math.PI / 2]) {
-      const geometry = new T.PlaneGeometry(
-        kind === "pine" ? 8 : 10,
-        kind === "pine" ? 13 : 11,
+    if (!items.length) continue;
+    const trunkHeight = kind === "pine" ? 3.6 : 2.8;
+    instantiate(
+      root,
+      new T.CylinderGeometry(
+        kind === "pine" ? 0.25 : 0.32,
+        kind === "pine" ? 0.4 : 0.48,
+        trunkHeight,
+        7,
+      ),
+      m.trunk,
+      items,
+      (_, object) => {
+        object.position.y += trunkHeight / 2;
+      },
+    );
+    const foliageParts: [T.BufferGeometry, number, number][] =
+      kind === "pine"
+        ? [
+            [new T.ConeGeometry(3.3, 5.8, 9), 4.5, 0],
+            [new T.ConeGeometry(2.7, 4.9, 9), 7.6, 0],
+            [new T.ConeGeometry(1.9, 3.7, 9), 10.2, 0],
+          ]
+        : [
+            [new T.IcosahedronGeometry(2.9, 1), 5.5, 1.8],
+            [new T.IcosahedronGeometry(2.6, 1), 7.2, -1.2],
+            [new T.IcosahedronGeometry(2.3, 1), 5.9, 1.8],
+          ];
+    const foliage = mergeGeometries(
+      foliageParts.map(([geometry, y, x]) => {
+        geometry.translate(x, y, 0);
+        return geometry;
+      }),
+    );
+    if (foliage) {
+      instantiate(
+        root,
+        foliage,
+        kind === "pine" ? m.pineFoliage : m.broadleafFoliage,
+        items,
+        (_, object) => {
+          object.position.y += kind === "pine" ? 0 : -0.2;
+        },
       );
-      geometry.translate(0, kind === "pine" ? 6.5 : 5.5, 0);
-      instantiate(root, geometry, m[kind], items, (_, object) => {
-        object.rotation.y += angle;
-      });
     }
   }
   instantiate(
@@ -613,6 +654,9 @@ function addRoadside(
           kind: "rock",
           scale: 1,
           rotation: p.heading,
+          // A beam runs along local +Z. Negative X rotation raises its far end
+          // with the route, matching the road and rider pitch convention.
+          pitch: -Math.atan(p.gradient),
         });
     }
   }
@@ -627,7 +671,10 @@ function addRoadside(
   );
   instantiate(
     root,
-    new T.BoxGeometry(0.18, 0.28, 7),
+    // Rails are centered on the same samples as the posts. Make each beam
+    // slightly longer than the sample interval so neighboring sections overlap
+    // instead of leaving a gap on long climbs.
+    new T.BoxGeometry(0.18, 0.28, step + 0.45),
     m.stone,
     rails,
     (_, o) => {
@@ -682,12 +729,17 @@ export function createScenery(
   const culled = root.children.filter(
     (child) => typeof child.userData.centerX === "number",
   );
+  let lastCullX = Infinity;
+  let lastCullZ = Infinity;
   return {
     materials,
     groundAt,
     region: land.region,
     update(dt: number, x: number, z: number) {
       materials.update(dt);
+      if (Math.hypot(x - lastCullX, z - lastCullZ) < 32) return;
+      lastCullX = x;
+      lastCullZ = z;
       for (const child of culled) {
         const dx = child.userData.centerX - x,
           dz = child.userData.centerZ - z;

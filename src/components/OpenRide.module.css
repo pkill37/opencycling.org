@@ -3,7 +3,23 @@
   min-height: 100svh;
   isolation: isolate;
   overflow: hidden;
-  background: #10231f;
+  background:
+    radial-gradient(circle at 10% -8%, #46664b 0, transparent 28rem),
+    radial-gradient(circle at 94% 12%, #284b40 0, transparent 31rem),
+    linear-gradient(135deg, #0d211e 0%, #122b25 50%, #0e211e 100%);
+}
+.app::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  content: "";
+  opacity: 0.18;
+  background-image:
+    linear-gradient(#d9f77e12 1px, transparent 1px),
+    linear-gradient(90deg, #d9f77e12 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: linear-gradient(to bottom, black, transparent 70%);
 }
 .world {
   position: absolute;
@@ -81,8 +97,10 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 4.5vw;
-  border-bottom: 1px solid var(--line);
+  padding: 24px max(4.5vw, 24px);
+  border-bottom: 1px solid #ffffff20;
+  background: #10231f55;
+  backdrop-filter: blur(14px);
 }
 .logo {
   display: flex;
@@ -95,6 +113,7 @@
 .logo > span:first-child {
   font-size: 36px;
   color: var(--accent);
+  filter: drop-shadow(0 0 14px #d9f77e55);
 }
 .local {
   font-size: 10px;
@@ -102,12 +121,13 @@
   color: #d3dfcd;
 }
 .home {
-  width: min(1280px, 92%);
+  position: relative;
+  width: min(1320px, 90%);
   margin: auto;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 40px;
-  padding: 32px 0;
+  grid-template-columns: minmax(0, 1.22fr) minmax(340px, 0.78fr);
+  gap: clamp(36px, 6vw, 92px);
+  padding: clamp(46px, 7vw, 92px) 0 70px;
   align-items: start;
 }
 .eyebrow {
@@ -117,6 +137,7 @@
   letter-spacing: 2px;
 }
 .guide {
+  grid-column: 1 / -1;
   border-top: 1px solid var(--line);
   padding-top: 24px;
   max-width: 75ch;
@@ -154,14 +175,51 @@
   text-decoration: underline;
 }
 .intro h1 {
-  font-size: clamp(32px, 3.5vw, 50px);
-  letter-spacing: -2px;
-  margin: 12px 0;
+  max-width: 10ch;
+  font-size: clamp(48px, 5.4vw, 82px);
+  letter-spacing: -5px;
+  line-height: 0.98;
+  margin: 18px 0 24px;
+}
+@media (min-width: 900px) {
+  .home {
+    grid-template-columns: minmax(0, 1.22fr) minmax(340px, 0.78fr);
+    grid-template-rows: auto auto;
+    gap: 70px clamp(36px, 6vw, 92px);
+    align-items: start;
+  }
+  .guide {
+    margin-top: 0;
+  }
 }
 .intro > p {
+  max-width: 58ch;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.7;
   color: #bfcdc3;
+}
+.introMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin-top: 24px;
+  color: #8fa59a;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+}
+.introMeta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.introMeta span::before {
+  width: 5px;
+  height: 5px;
+  content: "";
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 12px #d9f77e99;
 }
 .metric {
   font-variant-numeric: tabular-nums;
@@ -186,11 +244,16 @@
 }
 .setup {
   min-width: 0;
-  background: transparent;
-  border: 0;
-  border-top: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 16px 0 0;
+  position: sticky;
+  top: 24px;
+  background: #102b26c7;
+  border: 1px solid #ffffff24;
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow:
+    0 24px 70px #06171455,
+    inset 0 1px #ffffff0d;
+  backdrop-filter: blur(18px);
 }
 .setup > label,
 .setup details label {
@@ -220,49 +283,21 @@
   padding: 8px;
   margin: 4px;
 }
-.bluetoothControl,
-.setup > .debugSettings {
+.bluetoothControl {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 0 14px;
   background: #ffffff03;
   font-size: 12px;
 }
-.setup > .debugSettings {
-  margin: 12px 0 0;
-}
-.debugSettings > summary {
-  padding: 12px 0;
-  cursor: pointer;
-  color: var(--muted);
-}
-.debugSettings[open] > summary {
-  border-bottom: 1px solid var(--line);
-}
-.debugGrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 24px;
-  padding: 4px 0;
-}
-.debugGrid > details {
-  min-width: 0;
-  margin: 8px 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  font-size: 12px;
-}
-.debugGrid summary {
-  cursor: pointer;
-}
 .setup h2 {
-  margin: 0 0 12px;
-  font-size: 10px;
+  margin: 0 0 18px;
+  font-size: 11px;
+  letter-spacing: 1.8px;
 }
 .setupControls {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 150px;
+  grid-template-columns: 1fr;
   align-items: stretch;
   gap: 16px;
 }
@@ -301,7 +336,51 @@
 }
 .bluetoothControl {
   display: flex;
+  flex-direction: column;
   padding: 0;
+}
+.bluetoothIssue {
+  display: grid;
+  gap: 5px;
+  margin: 0 14px 10px;
+  padding: 10px;
+  border-left: 2px solid #d9f77e99;
+  background: #ffffff08;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.bluetoothIssue strong {
+  color: var(--text);
+  font-size: 10px;
+}
+.bluetoothIssue p {
+  margin: 0;
+}
+.bluetoothIssue .button {
+  justify-self: start;
+  min-height: 30px;
+  padding: 6px 10px;
+  font-size: 10px;
+}
+.bluetoothOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  min-height: 30px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.bluetoothOptionIcon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
 }
 .sourceButton {
   width: 100%;
@@ -418,8 +497,10 @@
   color: #22302b;
   border: 0 !important;
   justify-content: space-between !important;
-  min-height: 52px !important;
-  font-size: 14px;
+  min-height: 58px !important;
+  font-size: 15px;
+  border-radius: 6px !important;
+  box-shadow: 0 8px 26px #d9f77e22;
 }
 .start:hover:not(:disabled) {
   background: #e5ffa1 !important;
@@ -824,9 +905,6 @@
   }
 }
 @media (max-width: 900px) {
-  .debugGrid {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .setupControls {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1017,5 +1095,69 @@
   .pauseCard h2 {
     font-size: 24px;
     margin: 8px 0 16px;
+  }
+}
+
+/* Start menu layout */
+.intro > p {
+  max-width: 47ch;
+  font-size: 15px;
+}
+.introMeta {
+  margin-top: 30px;
+}
+.setupControls {
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+.setupControls .start {
+  grid-column: auto;
+}
+.setup > p[role="status"],
+.setup > p[role="alert"] {
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #ffffff08;
+}
+.setup .modeSelect {
+  background: #081c19aa;
+}
+.setup .bluetoothControl {
+  border-color: #ffffff25;
+  background: #081c1966;
+}
+.setup .advanced {
+  margin-top: 18px;
+  border-top-color: #ffffff1c;
+}
+
+@media (max-width: 900px) {
+  .home {
+    width: min(680px, 88%);
+    padding-top: 42px;
+  }
+  .intro h1 {
+    max-width: 11ch;
+    font-size: clamp(44px, 10vw, 64px);
+    letter-spacing: -3px;
+  }
+  .setup {
+    position: static;
+    padding: 22px;
+    border: 1px solid #ffffff24;
+    border-radius: 12px;
+  }
+}
+
+@media (max-width: 600px) {
+  .home {
+    width: calc(100% - 32px);
+    padding-top: 34px;
+  }
+  .intro h1 {
+    font-size: 46px;
+  }
+  .setup {
+    padding: 18px;
   }
 }
