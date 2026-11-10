@@ -39,9 +39,10 @@ ride noindex directive, and landing performance constraints.
 - The homepage has one descriptive H1, a topic-specific title and description,
   English language metadata, Open Graph/Twitter previews, and WebApplication
   JSON-LD describing the free app.
-- All ten FAQ answers are included in the exported HTML inside native `details`
+- All twelve FAQ answers are included in the exported HTML inside native `details`
   elements. They can be opened without JavaScript. Content covers actual routes,
-  trainer limitations, simulator use, imports, privacy and game modes.
+  trainer limitations, simulator use, imports, privacy, game modes, Wahoo GPS
+  bike computers and free Zwift-alternative intent.
 - Keep the existing app structured data. Google retired FAQ rich results in May
   2026, so FAQPage markup is not needed for that search feature. See
   [Google’s documentation updates](https://developers.google.com/search/updates#june-2026).

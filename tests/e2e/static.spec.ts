@@ -15,9 +15,7 @@ test("landing content and SEO are present without JavaScript", async ({
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
   await page.goto("/");
-  await expect(page).toHaveTitle(
-    "OpenCycling.org — Free Virtual Cycling & Indoor Training",
-  );
+  await expect(page).toHaveTitle("Free Indoor Bike Training | OpenCycling.org");
   await expect(page.locator('meta[name="description"]')).toHaveAttribute(
     "content",
     /Bluetooth smart trainer/,
@@ -28,14 +26,14 @@ test("landing content and SEO are present without JavaScript", async ({
   );
   await expect(page.locator("h1")).toHaveCount(1);
   await expect(page.locator("h1")).toHaveText(
-    "Free virtual cycling in your browser.",
+    "Free indoor bike training in your browser.",
   );
   await expect(
     page.getByRole("heading", { name: "Frequently asked questions" }),
   ).toBeVisible();
   const faq = page.getByRole("region", { name: "Frequently asked questions" });
   const questions = faq.locator("details");
-  await expect(questions).toHaveCount(10);
+  await expect(questions).toHaveCount(12);
   for (const question of await questions.all()) {
     await expect(question.locator("summary")).toBeVisible();
     await expect(question.locator("p")).toBeHidden();

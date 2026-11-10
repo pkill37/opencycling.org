@@ -1,7 +1,6 @@
-export const siteTitle =
-  "OpenCycling.org — Free Virtual Cycling & Indoor Training";
+export const siteTitle = "Free Indoor Bike Training | OpenCycling.org";
 export const siteDescription =
-  "Free, open source virtual cycling in your browser. Ride Alpe d’Huez, Paris or Marseille with a Bluetooth smart trainer, or try the keyboard simulator.";
+  "Free indoor bike training in your browser: an open-source Zwift alternative with French routes, Bluetooth smart trainer support, and no account or subscription.";
 
 export function parseSiteUrl(value: string | undefined): URL | undefined {
   if (!value?.trim()) return undefined;

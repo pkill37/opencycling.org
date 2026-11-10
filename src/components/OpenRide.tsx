@@ -767,7 +767,11 @@ function LoadedOpenRide({
                   </span>
                 </label>
               )}
-              <PhysicsSettings value={physics} onChange={setPhysics} />
+              <PhysicsSettings
+                value={physics}
+                onChange={setPhysics}
+                onImportRoute={setRoute}
+              />
             </div>
             {!initialSetup && <LandingGuide />}
           </section>

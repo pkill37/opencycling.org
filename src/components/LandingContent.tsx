@@ -3,11 +3,11 @@ import styles from "./OpenRide.module.css";
 export function LandingIntro() {
   return (
     <>
-      <h1>Free virtual cycling in your browser.</h1>
+      <h1>Free indoor bike training in your browser.</h1>
       <p>
-        Ride French roads with your Bluetooth smart trainer or try the keyboard
-        simulator. OpenCycling.org is an open source indoor cycling game, free
-        to play with no account needed.
+        Ride French roads with a Bluetooth smart trainer or try the keyboard
+        simulator. OpenCycling.org is a free, open-source Zwift alternative for
+        indoor cycling with no account or subscription.
       </p>
       <div className={styles.introMeta} aria-label="OpenCycling benefits">
         <span>NO ACCOUNT</span>
@@ -57,6 +57,27 @@ export function LandingGuide() {
           OpenCycling.org is free to play and open source. You can choose a
           route, connect a compatible trainer or use the simulator, and start
           riding without an account or subscription.
+        </p>
+      </details>
+      <details>
+        <summary>Is OpenCycling.org a free Zwift alternative?</summary>
+        <p>
+          Yes. OpenCycling.org is a free, open-source indoor cycling game with
+          no subscription or account. It is an independent browser app, not
+          affiliated with Zwift, and focuses on solo rides with French routes,
+          Bluetooth trainer data and a keyboard simulator.
+        </p>
+      </details>
+      <details>
+        <summary>
+          Can I use a Wahoo GPS bike computer with OpenCycling.org?
+        </summary>
+        <p>
+          OpenCycling.org connects directly to compatible Bluetooth smart
+          trainers and cycling power meters, not to Wahoo GPS bike computers. A
+          Wahoo ELEMNT or other GPS bike computer may record an indoor ride
+          separately when your trainer or power meter broadcasts to it; the
+          exact setup depends on your Wahoo model and sensors.
         </p>
       </details>
       <details>
@@ -113,16 +134,11 @@ export function LandingGuide() {
           OpenCycling.org has no backend and does not upload your Bluetooth
           device or ride data.
         </p>
-      </details>
-      <details>
-        <summary>What terrain data does OpenCycling.org use?</summary>
         <p>
-          <a href="https://registry.opendata.aws/terrain-tiles/">
-            Terrain: Mapzen
-          </a>{" "}
-          · SRTM courtesy of USGS · Produced using Copernicus data and
-          information funded by the European Union — EU-DEM layers. Surrounding
-          terrain only; road elevations unchanged.
+          Terrain:{" "}
+          <a href="https://registry.opendata.aws/terrain-tiles/">Mapzen</a>
+           · SRTM courtesy of USGS  · Copernicus/EU-DEM layers. Surrounding
+          terrain only; road elevations are unchanged.
         </p>
       </details>
       <a href="/ride/">Set up a virtual cycling ride</a>
