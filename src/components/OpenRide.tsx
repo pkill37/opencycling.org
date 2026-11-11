@@ -10,6 +10,7 @@ import {
 } from "react";
 import { defaultPhysicsConfig } from "@/game/physics/cycling";
 import RouteSelection from "./RouteSelection";
+import RouteImport from "./RouteImport";
 import { bundledRoutes, loadBundledRoute } from "@/game/route/bundled";
 import RouteMinimap from "./RouteMinimap";
 import PhysicsSettings from "./PhysicsSettings";
@@ -19,6 +20,14 @@ import { SimulatorSource } from "@/bluetooth/sources/simulator-source";
 import { BluetoothTrainerSource } from "@/bluetooth/sources/bluetooth-trainer-source";
 import { bluetoothAvailability } from "@/bluetooth/availability";
 import { requestScreenWakeLock } from "@/lib/wake-lock";
+import {
+  ghostAtTime,
+  ghostTimeAtDistance,
+  loadGhost,
+  saveGhostIfFaster,
+  type GhostPlayback,
+  type GhostSample,
+} from "@/lib/ghost";
 import type { CyclingRoute, RideSummary, RiderState } from "@/types";
 import styles from "./OpenRide.module.css";
 const time = (seconds: number) =>
@@ -31,7 +40,7 @@ const subscribeToHydration = () => () => {};
 const getClientSnapshot = () => true;
 const getServerSnapshot = () => false;
 const presets = [100, 150, 200, 250, 300, 400, 500, 600, 800];
-type GameMode = "ride" | "zombies";
+type GameMode = "ride" | "zombies" | "ghost";
 export default function OpenRide({
   initialSetup = false,
 }: {
@@ -109,6 +118,7 @@ function LoadedOpenRide({
   initialSetup: boolean;
 }) {
   const [route, setRoute] = useState(initialRoute);
+  const [ghostRun, setGhostRun] = useState(() => loadGhost(initialRoute.id));
   const [routeLoading, setRouteLoading] = useState(false);
   const [loadingRouteKey, setLoadingRouteKey] = useState("alpe");
   const [routeError, setRouteError] = useState("");
@@ -119,7 +129,9 @@ function LoadedOpenRide({
     setLoadingRouteKey(key);
     setRouteLoading(true);
     try {
-      setRoute(await loadBundledRoute(key));
+      const nextRoute = await loadBundledRoute(key);
+      setRoute(nextRoute);
+      setGhostRun(loadGhost(nextRoute.id));
     } catch (error) {
       setRouteError(
         error instanceof Error ? error.message : "Route loading failed.",
@@ -185,7 +197,17 @@ function LoadedOpenRide({
       ReturnType<typeof import("@/game/world/scene").createWorld>
     > | null>(null),
     zombiesMode = useRef<ZombiesMode | null>(null),
-    zombiesSnapshot = useRef(noZombies);
+    zombiesSnapshot = useRef(noZombies),
+    ghostSamples = useRef<GhostSample[]>([]),
+    lastGhostSampleMs = useRef(-Infinity),
+    ghostRunRef = useRef(ghostRun),
+    modeRef = useRef(mode);
+  useEffect(() => {
+    ghostRunRef.current = ghostRun;
+  }, [ghostRun]);
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
   useEffect(() => {
     const unsubscribe = trainer.subscribeChanges(() => refresh((x) => x + 1));
     return () => {
@@ -207,7 +229,7 @@ function LoadedOpenRide({
     setSetup(true);
     void trainer.connect(false, cps, reconnect);
   };
-  const start = async () => {
+  const start = async (requestedMode: GameMode = mode) => {
     let hardwareControl = false;
     let controlWarning = "";
     if (controlResistance && source === "bluetooth") {
@@ -230,6 +252,16 @@ function LoadedOpenRide({
     next.enableTrainerControl(hardwareControl);
     if (controlWarning) next.setControlWarning(controlWarning);
     if (source === "simulator") next.ingest(sim.sample());
+    ghostSamples.current = [
+      {
+        elapsedSeconds: 0,
+        distanceMeters: 0,
+        speedMetersPerSecond: 0,
+        cadenceRpm: 0,
+      },
+    ];
+    lastGhostSampleMs.current = -Infinity;
+    setGhostRun(loadGhost(route.id));
     setEngine(next);
     setWorldLoading(true);
     setSnapshot({ ...next.state });
@@ -240,7 +272,7 @@ function LoadedOpenRide({
     setControlActive(hardwareControl);
     setWorldError("");
     setSummaryReason("ended");
-    if (mode === "zombies") {
+    if (requestedMode === "zombies") {
       zombiesMode.current = new ZombiesMode(next.state.distanceMeters);
       zombiesSnapshot.current = zombiesMode.current.snapshot;
       setZombies(zombiesSnapshot.current);
@@ -257,6 +289,16 @@ function LoadedOpenRide({
     setSummary(activeEngine.summary());
     setPhase("summary");
   }, [activeEngine, setPhase]);
+  const ghostPlayback = useCallback((): GhostPlayback | undefined => {
+    const run = ghostRunRef.current;
+    const elapsedSeconds = activeEngine.state.elapsedSeconds;
+    if (modeRef.current !== "ghost" || !run) return undefined;
+    const sample = ghostAtTime(run, elapsedSeconds);
+    return {
+      ...sample,
+      visible: elapsedSeconds <= run.elapsedSeconds,
+    };
+  }, [activeEngine]);
   const togglePause = useCallback(async () => {
     if (!activeEngine.paused) {
       activeEngine.setPaused(true);
@@ -322,6 +364,7 @@ function LoadedOpenRide({
             e,
             () => zombiesSnapshot.current,
             () => showingSummary.current,
+            ghostPlayback,
             elevation,
             prepared,
           );
@@ -344,6 +387,18 @@ function LoadedOpenRide({
           if (!showingSummary.current) {
             e.advance(dt);
             zombiesMode.current?.advance(dt, e.state);
+            if (
+              e.state.elapsedSeconds * 1000 - lastGhostSampleMs.current >=
+              100
+            ) {
+              ghostSamples.current.push({
+                elapsedSeconds: e.state.elapsedSeconds,
+                distanceMeters: e.state.distanceMeters,
+                speedMetersPerSecond: e.state.speedMetersPerSecond,
+                cadenceRpm: e.state.cadenceRpm,
+              });
+              lastGhostSampleMs.current = e.state.elapsedSeconds * 1000;
+            }
           }
           if (!document.hidden) view?.render(dt);
           if (now - published > 100 && !showingSummary.current) {
@@ -365,6 +420,18 @@ function LoadedOpenRide({
               showingSummary.current = true;
             }
             if (!showingSummary.current && e.completed) {
+              ghostSamples.current.push({
+                elapsedSeconds: e.state.elapsedSeconds,
+                distanceMeters: e.state.distanceMeters,
+                speedMetersPerSecond: e.state.speedMetersPerSecond,
+                cadenceRpm: e.state.cadenceRpm,
+              });
+              const savedGhost = saveGhostIfFaster(
+                e.course.id,
+                ghostSamples.current,
+                e.state.elapsedSeconds,
+              );
+              if (savedGhost) setGhostRun(savedGhost);
               e.setPaused(true);
               setSummaryReason("finished");
               setSummary(e.summary());
@@ -397,7 +464,7 @@ function LoadedOpenRide({
       view?.dispose();
       world.current = null;
     };
-  }, [worldActive, activeEngine]);
+  }, [worldActive, activeEngine, ghostPlayback]);
   useEffect(() => {
     if (phase !== "ride") return;
     let active = true;
@@ -473,7 +540,6 @@ function LoadedOpenRide({
       if (source === "simulator") {
         if (k === "arrowup" || k === "w") sim.increasePower();
         if (k === "arrowdown" || k === "s") sim.decreasePower();
-        if (k === " " && !event.repeat) sim.sprint();
         if (/^[1-9]$/.test(k)) sim.setPower(presets[Number(k) - 1]);
       }
     };
@@ -562,6 +628,20 @@ function LoadedOpenRide({
                 loading={routeLoading}
                 onSelect={(key) => void loadRoute(key)}
               />
+              <div className={styles.routeImportCard}>
+                <div className={styles.routeImportHeading}>
+                  <span className={styles.eyebrow}>YOUR ROUTE</span>
+                  <h2>Ride a custom course</h2>
+                  <p>Load a GPX file or route package from your device.</p>
+                </div>
+                <RouteImport
+                  onSelect={(customRoute) => {
+                    setRoute(customRoute);
+                    setGhostRun(loadGhost(customRoute.id));
+                    setRouteError("");
+                  }}
+                />
+              </div>
             </div>
             <div className={styles.setup}>
               <noscript>
@@ -734,6 +814,17 @@ function LoadedOpenRide({
                   >
                     <strong>Zombies Mode</strong>
                   </button>
+                  <button
+                    className={mode === "ghost" ? styles.selected : ""}
+                    aria-pressed={mode === "ghost"}
+                    disabled={!ghostRun}
+                    onClick={() => setMode("ghost")}
+                  >
+                    <strong>Ghost Mode</strong>
+                    <small>
+                      {ghostRun ? "Beat your best" : "Complete a ride first"}
+                    </small>
+                  </button>
                   <button disabled>
                     <strong>Online</strong>
                     <small>Coming soon</small>
@@ -744,7 +835,7 @@ function LoadedOpenRide({
                   disabled={
                     !canStart || routeLoading || !!routeError || !!worldError
                   }
-                  onClick={start}
+                  onClick={() => void start()}
                 >
                   Start <span>→</span>
                 </button>
@@ -767,11 +858,7 @@ function LoadedOpenRide({
                   </span>
                 </label>
               )}
-              <PhysicsSettings
-                value={physics}
-                onChange={setPhysics}
-                onImportRoute={setRoute}
-              />
+              <PhysicsSettings value={physics} onChange={setPhysics} />
             </div>
             {!initialSetup && <LandingGuide />}
           </section>
@@ -787,60 +874,59 @@ function LoadedOpenRide({
                 onSeek={source === "simulator" ? seekSimulator : undefined}
               />
               <div className={styles.telemetry}>
-                {source !== "simulator" && (
-                  <div role="status" className={styles.controlStatus}>
-                    {controlActive
-                      ? "Trainer control active"
-                      : warning.includes("Trainer control")
-                        ? "Trainer control unavailable"
-                        : "Virtual resistance only"}
-                  </div>
-                )}
-                <div className={styles.power} role="group" aria-label="Power">
-                  <span>POWER</span>
-                  <strong>
-                    {Math.round(snapshot.powerWatts)}
-                    <small>W</small>
-                  </strong>
-                  <span>
-                    {source === "simulator"
-                      ? "VIRTUAL TRAINER"
-                      : "LIVE TRAINER"}
-                  </span>
-                  {source === "simulator" && (
-                    <div className={styles.powerControls}>
-                      <button
-                        aria-label="Decrease power"
-                        onClick={() => sim.decreasePower()}
-                      >
-                        −
-                      </button>
-                      <button onClick={() => sim.sprint()}>Sprint</button>
-                      <button
-                        aria-label="Increase power"
-                        onClick={() => sim.increasePower()}
-                      >
-                        +
-                      </button>
+                <div className={styles.telemetryPanel}>
+                  {source !== "simulator" && (
+                    <div role="status" className={styles.controlStatus}>
+                      {controlActive
+                        ? "Trainer control active"
+                        : warning.includes("Trainer control")
+                          ? "Trainer control unavailable"
+                          : "Virtual resistance only"}
                     </div>
                   )}
-                </div>
-                <div className={styles.primaryMetrics}>
-                  {metric(
-                    "SPEED",
-                    (snapshot.speedMetersPerSecond * 3.6).toFixed(1),
-                    "km/h",
-                  )}
-                  {metric(
-                    "CADENCE",
-                    Math.round(snapshot.cadenceRpm).toString(),
-                    "rpm",
-                  )}
-                  {metric(
-                    "GRADIENT",
-                    `${snapshot.gradient >= 0 ? "+" : ""}${(snapshot.gradient * 100).toFixed(1)}`,
-                    "%",
-                  )}
+                  <div className={styles.power} role="group" aria-label="Power">
+                    <span>POWER</span>
+                    <div className={styles.powerReadout}>
+                      <strong>
+                        {Math.round(snapshot.powerWatts)}
+                        <small>W</small>
+                      </strong>
+                      {source === "simulator" && (
+                        <div className={styles.powerControls}>
+                          <button
+                            aria-label="Decrease power"
+                            onClick={() => sim.decreasePower()}
+                          >
+                            −
+                          </button>
+                          <button
+                            aria-label="Increase power"
+                            onClick={() => sim.increasePower()}
+                          >
+                            +
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {source !== "simulator" && <span>LIVE TRAINER</span>}
+                  </div>
+                  <div className={styles.primaryMetrics}>
+                    {metric(
+                      "SPEED",
+                      (snapshot.speedMetersPerSecond * 3.6).toFixed(1),
+                      "km/h",
+                    )}
+                    {metric(
+                      "CADENCE",
+                      Math.round(snapshot.cadenceRpm).toString(),
+                      "rpm",
+                    )}
+                    {metric(
+                      "GRADIENT",
+                      `${snapshot.gradient >= 0 ? "+" : ""}${(snapshot.gradient * 100).toFixed(1)}`,
+                      "%",
+                    )}
+                  </div>
                 </div>
               </div>
               <div className={styles.routeHud}>
@@ -884,6 +970,20 @@ function LoadedOpenRide({
                     km to go
                   </span>
                 </small>
+                {mode === "ghost" && ghostRun && (
+                  <small className={styles.ghostStatus}>
+                    GHOST ·{" "}
+                    {snapshot.elapsedSeconds >=
+                    ghostTimeAtDistance(ghostRun, snapshot.distanceMeters)
+                      ? "+"
+                      : "−"}
+                    {Math.abs(
+                      snapshot.elapsedSeconds -
+                        ghostTimeAtDistance(ghostRun, snapshot.distanceMeters),
+                    ).toFixed(1)}
+                    s
+                  </small>
+                )}
               </div>
               {mode === "zombies" && (
                 <div
@@ -908,7 +1008,7 @@ function LoadedOpenRide({
                     {zombies.threat === "caught"
                       ? "CAUGHT"
                       : zombies.threat === "danger"
-                        ? "SPRINT NOW"
+                        ? "RIDE HARD"
                         : zombies.threat === "warning"
                           ? "CLOSING FAST"
                           : "BEHIND YOU"}
@@ -939,20 +1039,6 @@ function LoadedOpenRide({
               </button>
             </div>
           )}
-          <div className={styles.controls}>
-            <div className={styles.controlGroup}>
-              <button onClick={toggleCamera} aria-label="Change camera">
-                ◉ <span>{camera}</span>
-              </button>
-              <button onClick={togglePause}>
-                {paused ? "Resume" : "Pause"}
-              </button>
-              <button onClick={() => setHud((x) => !x)}>
-                {hud ? "Hide HUD" : "Show HUD"}
-              </button>
-              <button onClick={finish}>Finish</button>
-            </div>
-          </div>
           {debug && (
             <pre className={styles.debug}>
               {fps} FPS / {(1000 / fps).toFixed(1)} ms{"\n"}
@@ -1000,7 +1086,12 @@ function LoadedOpenRide({
                 : "Ride wrapped."}
           </h1>
           <p>
-            {route.name} · {mode === "zombies" ? "Zombies Mode · " : ""}
+            {route.name} ·
+            {mode === "zombies"
+              ? " Zombies Mode · "
+              : mode === "ghost"
+                ? " Ghost Mode · "
+                : " "}
             {summaryReason === "caught"
               ? `Survived ${time(zombies.survivedSeconds)}`
               : activeEngine.completed
@@ -1030,7 +1121,14 @@ function LoadedOpenRide({
           <button
             className={`button ${styles.start}`}
             disabled={!canStart}
-            onClick={start}
+            onClick={() => {
+              const nextMode =
+                summaryReason === "finished" && mode === "ride" && ghostRun
+                  ? "ghost"
+                  : mode;
+              setMode(nextMode);
+              void start(nextMode);
+            }}
           >
             Ride again →
           </button>

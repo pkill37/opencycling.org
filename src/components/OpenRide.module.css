@@ -221,6 +221,44 @@
   background: var(--accent);
   box-shadow: 0 0 12px #d9f77e99;
 }
+.routeImportCard {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #ffffff03;
+}
+.routeImportHeading h2 {
+  margin: 6px 0 4px;
+  font-size: 22px;
+  letter-spacing: -0.7px;
+}
+.routeImportHeading p {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.routeImportCard section p {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.routeImportCard section label {
+  display: block;
+  margin: 10px 0;
+  font-size: 12px;
+}
+.routeImportCard section select,
+.routeImportCard section input[type="file"] {
+  max-width: 100%;
+  color: inherit;
+  background: #172c29;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 6px;
+}
+.routeImportCard section button {
+  margin: 4px 8px 4px 0;
+}
 .metric {
   font-variant-numeric: tabular-nums;
   display: flex;
@@ -577,9 +615,11 @@
   top: max(24px, env(safe-area-inset-top));
   width: 190px;
 }
-.power {
+.telemetryPanel {
   composes: panel from "./Hud.module.css";
   padding: 12px 16px;
+}
+.power {
   display: flex;
   flex-direction: column;
 }
@@ -590,6 +630,11 @@
 }
 .power > span:nth-of-type(2) {
   font-size: 8px;
+}
+.powerReadout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .power strong {
   font-size: 56px;
@@ -605,36 +650,35 @@
   margin-left: 8px;
 }
 .powerControls {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  display: flex;
+  flex-direction: column;
   gap: 2px;
-  margin-top: 12px;
-  border-top: 1px solid var(--line);
-  padding-top: 8px;
 }
 .powerControls button {
-  min-height: 44px;
+  width: 26px;
+  height: 24px;
   padding: 0;
   border: 0;
   border-radius: 4px;
   background: #ffffff0a;
-  font-size: 11px;
+  font-size: 10px;
   touch-action: manipulation;
 }
 .powerControls button:first-child,
 .powerControls button:last-child {
   color: var(--accent);
-  font-size: 24px;
+  font-size: 18px;
 }
 .powerControls button:hover {
   background: #ffffff17;
 }
 .primaryMetrics {
-  composes: panel from "./Hud.module.css";
   display: flex;
   flex-wrap: wrap;
   gap: 14px 22px;
-  padding: 12px 16px;
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
 }
 .primaryMetrics > .metric:first-child {
   width: 100%;
@@ -648,8 +692,8 @@
 .routeHud {
   composes: panel from "./Hud.module.css";
   position: absolute;
-  left: max(24px, env(safe-area-inset-left));
-  bottom: max(24px, env(safe-area-inset-bottom));
+  left: max(12px, env(safe-area-inset-left));
+  bottom: max(12px, env(safe-area-inset-bottom));
   width: 290px;
   padding: 14px;
 }
@@ -683,6 +727,10 @@
   font-size: 8px;
   letter-spacing: 1px;
   color: var(--muted);
+}
+.routeHud .ghostStatus {
+  margin-top: 8px;
+  color: var(--accent);
 }
 .zombieHud {
   composes: panel from "./Hud.module.css";
@@ -737,38 +785,6 @@
 .zombieDanger strong,
 .zombieCaught strong {
   color: #ff8d7a;
-}
-.controls {
-  position: absolute;
-  bottom: max(24px, env(safe-area-inset-bottom));
-  left: 24px;
-  right: 24px;
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  align-items: center;
-}
-.controlGroup {
-  composes: panel from "./Hud.module.css";
-  --hud-background: 20 43 39;
-  --hud-border: var(--line);
-  --hud-radius: 4px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px;
-}
-.controlGroup button {
-  border: 0;
-  background: transparent;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 8px 14px;
-  border-radius: 4px;
-  font-size: 12px;
-}
-.controlGroup button:hover {
-  background: #ffffff17;
 }
 .pauseCard {
   composes: panel from "./Hud.module.css";
@@ -950,7 +966,7 @@
     width: 160px;
   }
   .power {
-    padding: 14px 18px;
+    padding: 0;
   }
   .power strong {
     font-size: 36px;
@@ -973,7 +989,7 @@
   }
   .routeHud {
     left: max(12px, env(safe-area-inset-left));
-    bottom: calc(76px + env(safe-area-inset-bottom));
+    bottom: max(12px, env(safe-area-inset-bottom));
     width: min(290px, calc(100vw - 24px));
     padding: 14px;
   }
@@ -997,21 +1013,6 @@
   }
   .routeHud progress {
     margin-top: 14px;
-  }
-  .controls {
-    left: 12px;
-    right: 12px;
-    bottom: max(12px, env(safe-area-inset-bottom));
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 8px;
-  }
-  .controlGroup button {
-    padding: 8px 10px;
-    font-size: 11px;
-  }
-  .controlGroup button span {
-    display: none;
   }
   .summaryGrid {
     grid-template-columns: repeat(2, 1fr);
@@ -1055,7 +1056,7 @@
     font-size: 45px;
   }
   .primaryMetrics {
-    padding: 8px 14px;
+    padding-top: 8px;
     gap: 8px 15px;
   }
   .primaryMetrics > .metric:first-child {
@@ -1066,7 +1067,7 @@
     font-size: 19px;
   }
   .routeHud {
-    bottom: calc(64px + env(safe-area-inset-bottom));
+    bottom: max(12px, env(safe-area-inset-bottom));
     width: 190px;
     padding: 12px;
   }
@@ -1076,17 +1077,6 @@
   }
   .routeHud .metric strong {
     font-size: 18px;
-  }
-  .controls {
-    bottom: 8px;
-    justify-content: space-between;
-    flex-wrap: nowrap;
-  }
-  .controlGroup {
-    padding: 2px;
-  }
-  .controlGroup button {
-    padding-inline: 8px;
   }
   .pauseCard {
     padding: 16px;

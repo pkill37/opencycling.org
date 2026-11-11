@@ -144,9 +144,6 @@ test("simulator controls clamp power and emit normalized samples", () => {
   assert.equal(s.power, 150);
   s.setPower(800);
   assert.equal(s.sample().powerWatts, 800);
-  s.sprint();
-  assert.equal(s.sample().powerWatts, 1100);
-  assert.equal(s.sample(Date.now() + 2000).powerWatts, 800);
   s.setPower(-50);
   assert.equal(s.power, 0);
 });

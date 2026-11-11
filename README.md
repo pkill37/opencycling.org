@@ -1134,7 +1134,6 @@ Keyboard controls:
 ```text
 Arrow Up / W      increase power
 Arrow Down / S    decrease power
-Space             temporary sprint
 1                 100 W
 2                 150 W
 3                 200 W
@@ -1363,7 +1362,6 @@ Provide optional touch controls:
 
 - increase power
 - decrease power
-- sprint
 - camera
 - pause
 

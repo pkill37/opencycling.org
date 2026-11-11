@@ -8,6 +8,7 @@ import type { ZombiesSnapshot } from "../modes/zombies";
 import { createRider } from "./rider";
 import { createScenery } from "./scenery";
 import { createTexturedGeometry } from "./geometry";
+import type { GhostPlayback } from "../../lib/ghost";
 
 function ribbon(
   route: CyclingRoute,
@@ -99,20 +100,155 @@ function addStartGate(scene: T.Scene, route: CyclingRoute) {
   gate.position.set(start.x, start.y, start.z);
   gate.rotation.y = start.heading;
   const postMaterial = new T.MeshStandardMaterial({ color: 0xe8e7d6 });
-  for (const x of [-4.5, 4.5]) {
-    const post = new T.Mesh(new T.BoxGeometry(0.35, 6, 0.35), postMaterial);
-    post.position.set(x, 3, 0);
-    post.castShadow = true;
-    gate.add(post);
+  const accentMaterial = new T.MeshStandardMaterial({
+    color: 0xd7f56d,
+    emissive: 0x526b20,
+    emissiveIntensity: 0.3,
+  });
+  const bannerMaterial = new T.MeshStandardMaterial({ color: 0x263f5d });
+  for (const z of [-3, 0, 3]) {
+    for (const x of [-7, 7]) {
+      const post = new T.Mesh(new T.BoxGeometry(0.5, 8, 0.5), postMaterial);
+      post.position.set(x, 4, z);
+      post.castShadow = true;
+      gate.add(post);
+    }
+    const beam = new T.Mesh(
+      new T.BoxGeometry(14.5, 0.65, 0.55),
+      accentMaterial,
+    );
+    beam.position.set(0, 8, z);
+    beam.castShadow = true;
+    gate.add(beam);
   }
-  const beam = new T.Mesh(
-    new T.BoxGeometry(9.4, 0.65, 0.4),
-    new T.MeshStandardMaterial({ color: 0xd7f56d }),
+  const roof = new T.Mesh(new T.BoxGeometry(15.2, 0.35, 6.8), bannerMaterial);
+  roof.position.y = 8.35;
+  roof.castShadow = true;
+  gate.add(roof);
+  const banner = new T.Mesh(new T.BoxGeometry(11, 1.15, 0.16), accentMaterial);
+  banner.position.set(0, 6.9, -3.05);
+  gate.add(banner);
+  for (const x of [-7.8, 7.8]) {
+    const flag = new T.Mesh(
+      new T.ConeGeometry(0.6, 1.7, 4),
+      new T.MeshStandardMaterial({ color: x < 0 ? 0xff8d7a : 0x35d7ff }),
+    );
+    flag.position.set(x, 7.3, -3.05);
+    flag.rotation.z = x < 0 ? -0.35 : 0.35;
+    gate.add(flag);
+  }
+  const startStripe = new T.Mesh(
+    new T.BoxGeometry(8.2, 0.035, 1.35),
+    new T.MeshStandardMaterial({ color: 0xf7f3dc }),
   );
-  beam.position.y = 6;
-  beam.castShadow = true;
-  gate.add(beam);
+  startStripe.position.y = 0.04;
+  startStripe.receiveShadow = true;
+  gate.add(startStripe);
   scene.add(gate);
+}
+
+function addFinishTunnel(scene: T.Scene, route: CyclingRoute) {
+  const finish = lookupRoute(route.distanceMeters, route);
+  const tunnel = new T.Group();
+  tunnel.position.set(finish.x, finish.y, finish.z);
+  tunnel.rotation.y = finish.heading;
+  const frame = new T.MeshStandardMaterial({ color: 0xf2eee0 });
+  const accent = new T.MeshStandardMaterial({
+    color: 0xd9f77e,
+    emissive: 0x526b20,
+    emissiveIntensity: 0.35,
+  });
+  const banner = new T.MeshStandardMaterial({ color: 0x263f5d });
+  for (const z of [-3, 0, 3]) {
+    for (const x of [-7, 7]) {
+      const post = new T.Mesh(new T.BoxGeometry(0.5, 8, 0.5), frame);
+      post.position.set(x, 4, z);
+      post.castShadow = true;
+      tunnel.add(post);
+    }
+    const beam = new T.Mesh(new T.BoxGeometry(14.5, 0.65, 0.55), accent);
+    beam.position.set(0, 8, z);
+    beam.castShadow = true;
+    tunnel.add(beam);
+  }
+  const roof = new T.Mesh(new T.BoxGeometry(15.2, 0.35, 6.8), banner);
+  roof.position.y = 8.35;
+  roof.castShadow = true;
+  tunnel.add(roof);
+  const sign = new T.Mesh(new T.BoxGeometry(11, 1.15, 0.16), accent);
+  sign.position.set(0, 6.9, -3.05);
+  tunnel.add(sign);
+  const finishStripe = new T.Mesh(
+    new T.BoxGeometry(8.2, 0.035, 1.35),
+    new T.MeshStandardMaterial({ color: 0xf7f3dc }),
+  );
+  finishStripe.position.y = 0.04;
+  finishStripe.receiveShadow = true;
+  tunnel.add(finishStripe);
+  scene.add(tunnel);
+
+  const celebration = new T.Group();
+  const colors = [0xd9f77e, 0x35d7ff, 0xff8d7a, 0xf7f3dc, 0xb68cff];
+  const particles: Array<{
+    mesh: T.Mesh;
+    velocity: T.Vector3;
+    spin: T.Vector3;
+  }> = [];
+  for (let i = 0; i < 42; i++) {
+    const mesh = new T.Mesh(
+      new T.BoxGeometry(0.14, 0.14, 0.08),
+      new T.MeshBasicMaterial({ color: colors[i % colors.length] }),
+    );
+    const angle = (i / 42) * Math.PI * 2;
+    mesh.position.set(
+      Math.cos(angle) * 5.5,
+      2.5 + (i % 5),
+      Math.sin(angle) * 2.5,
+    );
+    celebration.add(mesh);
+    particles.push({
+      mesh,
+      velocity: new T.Vector3(
+        Math.cos(angle) * (2 + (i % 3)),
+        4 + (i % 4) * 0.8,
+        Math.sin(angle) * (2 + (i % 2)),
+      ),
+      spin: new T.Vector3(1.5 + (i % 3), 2 + (i % 4), 1 + (i % 2)),
+    });
+  }
+  celebration.position.set(finish.x, finish.y, finish.z);
+  celebration.rotation.y = finish.heading;
+  celebration.visible = false;
+  scene.add(celebration);
+  let celebrationTime = 0;
+  return {
+    celebrate() {
+      if (celebration.visible) return;
+      celebrationTime = 0;
+      celebration.visible = true;
+      particles.forEach(({ mesh, velocity }, index) => {
+        const angle = (index / particles.length) * Math.PI * 2;
+        mesh.position.set(
+          Math.cos(angle) * 5.5,
+          2.5 + (index % 5),
+          Math.sin(angle) * 2.5,
+        );
+        velocity.y = 4 + (index % 4) * 0.8;
+      });
+    },
+    update(dt: number) {
+      if (!celebration.visible) return;
+      celebrationTime += dt;
+      particles.forEach(({ mesh, velocity, spin }) => {
+        velocity.y -= 7.5 * dt;
+        mesh.position.addScaledVector(velocity, dt);
+        mesh.rotation.x += spin.x * dt;
+        mesh.rotation.y += spin.y * dt;
+        mesh.rotation.z += spin.z * dt;
+      });
+      if (celebrationTime > 5) celebration.visible = false;
+    },
+  };
 }
 
 function zombieVariant(index: number) {
@@ -204,6 +340,7 @@ export function createWorld(
   engine: RideEngine,
   getZombies?: () => ZombiesSnapshot,
   getResting?: () => boolean,
+  getGhost?: () => GhostPlayback | undefined,
   elevation?: ElevationSampler,
   prepared?: TerrainTileData[],
 ) {
@@ -243,7 +380,10 @@ export function createWorld(
   scene.add(fill);
   const sun = new T.DirectionalLight(0xfff0d7, 2.3);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(512, 512);
+  sun.shadow.mapSize.set(
+    lowPowerDevice ? 256 : 512,
+    lowPowerDevice ? 256 : 512,
+  );
   Object.assign(sun.shadow.camera, {
     left: -55,
     right: 55,
@@ -289,9 +429,31 @@ export function createWorld(
   }
   scene.add(marks);
   addStartGate(scene, route);
+  const finishScene = addFinishTunnel(scene, route);
   const rider = createRider();
+  const ghostRider = createRider();
+  ghostRider.group.traverse((object) => {
+    if (!(object instanceof T.Mesh)) return;
+    const materials = Array.isArray(object.material)
+      ? object.material
+      : [object.material];
+    materials.forEach((material) => {
+      material.transparent = true;
+      material.opacity = 0.72;
+      material.depthWrite = false;
+      if (material instanceof T.MeshStandardMaterial && material.map) {
+        material.map = null;
+        material.color.set(0x35d7ff);
+      }
+    });
+    object.renderOrder = 3;
+  });
+  ghostRider.group.scale.setScalar(0.98);
+  ghostRider.group.renderOrder = 3;
+  ghostRider.group.visible = false;
   const riderShadow = createContactShadow();
   scene.add(rider.group);
+  scene.add(ghostRider.group);
   if (riderShadow) scene.add(riderShadow);
   const zombieMeshes = Array.from({ length: 4 }, (_, index) => {
     const zombie = createZombie(index);
@@ -303,11 +465,12 @@ export function createWorld(
     initialized = false,
     qualityTime = 0,
     qualityFrames = 0,
-    shadowTime = 1 / 20,
+    shadowTime = 1 / 12,
     orbitYaw = 0,
     orbitPitch = 0,
     orbitDistance = 5.7,
     dragging = false,
+    finishCelebrationTriggered = false,
     pointerId: number | null = null,
     lastPointerX = 0,
     lastPointerY = 0;
@@ -391,13 +554,13 @@ export function createWorld(
       if (dt > 0 && !document.hidden) {
         qualityTime += dt;
         qualityFrames++;
-        if (qualityTime > 3) {
+        if (qualityTime > 1.5) {
           const average = qualityTime / qualityFrames,
             currentRatio = renderer.getPixelRatio();
           const nextRatio =
-            average > 1 / 42
+            average > 1 / 48
               ? Math.max(0.8, currentRatio - 0.15)
-              : average < 1 / 58
+              : average < 1 / 57
                 ? Math.min(maxPixelRatio, currentRatio + 0.05)
                 : currentRatio;
           if (nextRatio !== currentRatio) renderer.setPixelRatio(nextRatio);
@@ -407,6 +570,11 @@ export function createWorld(
       }
       const state = engine.state,
         point = lookupRoute(state.distanceMeters, route);
+      if (engine.completed && !finishCelebrationTriggered) {
+        finishCelebrationTriggered = true;
+        finishScene.celebrate();
+      }
+      finishScene.update(Math.max(0, dt));
       const resting = getResting?.() ?? false;
       if (resting && cameraMode !== 0) {
         cameraMode = 0;
@@ -432,6 +600,28 @@ export function createWorld(
         moving ? state.speedMetersPerSecond : 0,
         resting,
       );
+      const ghost = getGhost?.();
+      if (ghost?.visible) {
+        const ghostPoint = lookupRoute(ghost.distanceMeters, route);
+        const ghostLateralOffset = 2.2;
+        ghostRider.group.position.set(
+          ghostPoint.x + Math.cos(ghostPoint.heading) * ghostLateralOffset,
+          ghostPoint.y + 0.09,
+          ghostPoint.z - Math.sin(ghostPoint.heading) * ghostLateralOffset,
+        );
+        ghostRider.group.rotation.set(
+          -Math.atan(ghostPoint.gradient),
+          ghostPoint.heading,
+          0,
+          "YXZ",
+        );
+        ghostRider.group.visible = true;
+        ghostRider.update(
+          moving ? dt : 0,
+          ghost.cadenceRpm,
+          ghost.speedMetersPerSecond,
+        );
+      } else ghostRider.group.visible = false;
       const zombieSnapshot = getZombies?.(),
         visibleZombieCount = zombieSnapshot?.caught
           ? 4

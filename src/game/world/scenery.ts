@@ -464,11 +464,13 @@ function addProps(root: T.Group, land: Landscape, m: WorldMaterials) {
             [new T.ConeGeometry(2.7, 4.9, 9), 7.6, 0],
             [new T.ConeGeometry(1.9, 3.7, 9), 10.2, 0],
           ]
-        : [
-            [new T.IcosahedronGeometry(2.9, 1), 5.5, 1.8],
-            [new T.IcosahedronGeometry(2.6, 1), 7.2, -1.2],
-            [new T.IcosahedronGeometry(2.3, 1), 5.9, 1.8],
-          ];
+        : land.region === "mediterranean"
+          ? [[new T.SphereGeometry(3.1, 10, 6), 5.4, 0]]
+          : [
+              [new T.IcosahedronGeometry(2.9, 1), 5.5, 1.8],
+              [new T.IcosahedronGeometry(2.6, 1), 7.2, -1.2],
+              [new T.IcosahedronGeometry(2.3, 1), 5.9, 1.8],
+            ];
     const foliage = mergeGeometries(
       foliageParts.map(([geometry, y, x]) => {
         geometry.translate(x, y, 0);
@@ -483,6 +485,8 @@ function addProps(root: T.Group, land: Landscape, m: WorldMaterials) {
         items,
         (_, object) => {
           object.position.y += kind === "pine" ? 0 : -0.2;
+          if (land.region === "mediterranean" && kind === "broadleaf")
+            object.scale.y *= 0.72;
         },
       );
     }

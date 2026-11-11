@@ -71,23 +71,70 @@ export function lookupRoute(distanceMeters: number, r: CyclingRoute) {
   const d = Math.max(0, Math.min(distanceMeters, r.distanceMeters));
   const { a, b, lo, hi, t } = segmentForDistance(d, r);
   const segment = segmentAt(r, lo);
-  const mix = (a: number, b: number) => a + (b - a) * t;
-  const before = r.points[Math.max(0, lo - 1)],
-    after = r.points[Math.min(r.points.length - 1, hi + 1)];
-  const curve = (p0: number, p1: number, p2: number, p3: number) => {
-    const value =
-      0.5 *
-      (2 * p1 +
-        (-p0 + p2) * t +
-        (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t +
-        (-p0 + 3 * p1 - 3 * p2 + p3) * t * t * t);
-    // GPS tracks can contain very tight corners. Keep the smoothing from
-    // inventing a loop or crossing the original segment bounds.
-    return Math.max(Math.min(p1, p2), Math.min(Math.max(p1, p2), value));
+  const segmentLength = Math.max(b.distanceMeters - a.distanceMeters, 0.001);
+  const tangentAt = (index: number, coordinate: "x" | "y" | "z") => {
+    const current = r.points[index];
+    const previous = r.points[Math.max(0, index - 1)];
+    const next = r.points[Math.min(r.points.length - 1, index + 1)];
+    if (previous === current)
+      return (
+        ((next[coordinate] - current[coordinate]) /
+          Math.max(next.distanceMeters - current.distanceMeters, 0.001)) *
+        segmentLength
+      );
+    if (next === current)
+      return (
+        ((current[coordinate] - previous[coordinate]) /
+          Math.max(current.distanceMeters - previous.distanceMeters, 0.001)) *
+        segmentLength
+      );
+    return (
+      ((next[coordinate] - previous[coordinate]) /
+        Math.max(next.distanceMeters - previous.distanceMeters, 0.001)) *
+      segmentLength
+    );
   };
-  const smoothX = curve(before.x, a.x, b.x, after.x),
-    smoothZ = curve(before.z, a.z, b.z, after.z),
-    smoothY = mix(a.y, b.y);
+  const hermite = (
+    start: number,
+    end: number,
+    startTangent: number,
+    endTangent: number,
+  ) => {
+    const t2 = t * t,
+      t3 = t2 * t;
+    return (
+      (2 * t3 - 3 * t2 + 1) * start +
+      (t3 - 2 * t2 + t) * startTangent +
+      (-2 * t3 + 3 * t2) * end +
+      (t3 - t2) * endTangent
+    );
+  };
+  const tangentXAtStart = tangentAt(lo, "x"),
+    tangentXAtEnd = tangentAt(hi, "x"),
+    tangentZAtStart = tangentAt(lo, "z"),
+    tangentZAtEnd = tangentAt(hi, "z"),
+    tangentYAtStart = tangentAt(lo, "y"),
+    tangentYAtEnd = tangentAt(hi, "y");
+  const smoothX = hermite(a.x, b.x, tangentXAtStart, tangentXAtEnd),
+    smoothZ = hermite(a.z, b.z, tangentZAtStart, tangentZAtEnd),
+    smoothY = hermite(a.y, b.y, tangentYAtStart, tangentYAtEnd);
+  const tangentHermite = (
+    start: number,
+    end: number,
+    startTangent: number,
+    endTangent: number,
+  ) => {
+    const t2 = t * t;
+    return (
+      (6 * t2 - 6 * t) * start +
+      (3 * t2 - 4 * t + 1) * startTangent +
+      (-6 * t2 + 6 * t) * end +
+      (3 * t2 - 2 * t) * endTangent
+    );
+  };
+  const tangentX = tangentHermite(a.x, b.x, tangentXAtStart, tangentXAtEnd),
+    tangentZ = tangentHermite(a.z, b.z, tangentZAtStart, tangentZAtEnd),
+    tangentLength = Math.hypot(tangentX, tangentZ);
   const lookDistance = Math.min(
     0.75,
     Math.max(0.1, (b.distanceMeters - a.distanceMeters) * 0.2),
@@ -116,9 +163,11 @@ export function lookupRoute(distanceMeters: number, r: CyclingRoute) {
         : (next.y - previous.y) / Math.max(horizontal, 0.01),
     curvature: Math.max(Math.abs(a.curvature ?? 0), Math.abs(b.curvature ?? 0)),
     heading:
-      horizontal > 0.01
-        ? Math.atan2(next.x - previous.x, next.z - previous.z)
-        : segment.heading,
+      tangentLength > 0.01
+        ? Math.atan2(tangentX, tangentZ)
+        : horizontal > 0.01
+          ? Math.atan2(next.x - previous.x, next.z - previous.z)
+          : segment.heading,
     progress: d / r.distanceMeters,
     remainingDistanceMeters: r.distanceMeters - d,
     index: lo,

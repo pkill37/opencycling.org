@@ -1,5 +1,4 @@
 import type { PhysicsConfig } from "@/types";
-import RouteImport from "./RouteImport";
 const fields = [
   ["riderMassKg", "Rider mass (kg)", 30, 200, 1],
   ["bikeMassKg", "Bike mass (kg)", 3, 40, 1],
@@ -16,11 +15,9 @@ const fields = [
 export default function PhysicsSettings({
   value,
   onChange,
-  onImportRoute,
 }: {
   value: PhysicsConfig;
   onChange: (config: PhysicsConfig) => void;
-  onImportRoute: (route: import("@/types").CyclingRoute) => void;
 }) {
   return (
     <details>
@@ -67,7 +64,6 @@ export default function PhysicsSettings({
         Automatic braking enabled. Speed ceiling 108 km/h; propulsion capped at
         900 N.
       </p>
-      <RouteImport onSelect={onImportRoute} />
     </details>
   );
 }

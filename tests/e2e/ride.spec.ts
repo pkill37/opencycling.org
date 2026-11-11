@@ -47,7 +47,7 @@ test("GPX validation, preview and selected-course riding", async ({ page }) => {
   const rider = page.getByTestId("minimap-rider");
   const before = await rider.getAttribute("transform");
   await expect(rider).not.toHaveAttribute("transform", before!);
-  await page.getByRole("button", { name: "Hide HUD" }).click();
+  await page.keyboard.press("h");
   await expect(page.getByLabel("Route minimap")).toBeHidden();
 });
 test("completed ride retains its live world under the green summary overlay", async ({
@@ -115,15 +115,13 @@ test("simulator ride, controls, pause, summary and restart", async ({
     page.getByRole("group", { name: "Power", exact: true }).locator("strong"),
   ).toHaveText(/325\s*W/);
   await page.screenshot({ path: "test-results/ride-desktop.png" });
-  await page.getByRole("button", { name: "Change camera" }).click();
-  await expect(page.getByText("First person", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await page.keyboard.press("p");
   await expect(
     page.getByRole("heading", { name: "Ride paused" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Resume ride" }).click();
   await expect(page.getByRole("heading", { name: "Ride paused" })).toBeHidden();
-  await page.getByRole("button", { name: "Finish", exact: true }).click();
+  await page.keyboard.press("Escape");
   await expect(
     page.getByRole("heading", { name: "Ride wrapped." }),
   ).toBeVisible();
@@ -150,8 +148,7 @@ test("phone simulator touch controls remain usable", async ({ page }) => {
   const powerBounds = await power.boundingBox();
   expect(powerBounds!.y).toBeLessThan(100);
   await page.screenshot({ path: "test-results/ride-phone.png" });
-  await page.getByRole("button", { name: "Sprint", exact: true }).click();
-  await page.getByRole("button", { name: "Finish", exact: true }).click();
+  await page.keyboard.press("Escape");
   await expect(
     page.getByRole("heading", { name: "Ride wrapped." }),
   ).toBeVisible();
@@ -167,7 +164,7 @@ test("mouse orbit and wheel zoom control the ride camera", async ({ page }) => {
   await page.getByRole("button", { name: "Start" }).click();
   const canvas = page.locator("canvas");
   await expect(canvas).toBeVisible();
-  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await page.keyboard.press("p");
   await expect(
     page.getByRole("heading", { name: "Ride paused" }),
   ).toBeVisible();

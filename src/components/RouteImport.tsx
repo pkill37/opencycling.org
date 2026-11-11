@@ -42,8 +42,7 @@ export default function RouteImport({
     }
   }
   return (
-    <details>
-      <summary>Import GPX or route package</summary>
+    <section aria-label="Import a custom route">
       <p>
         Local processing. Select a track and segment; gaps are never joined
         automatically. Review before loading.
@@ -179,6 +178,6 @@ export default function RouteImport({
           </button>
         </>
       )}
-    </details>
+    </section>
   );
 }

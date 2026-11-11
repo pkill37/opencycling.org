@@ -4,7 +4,6 @@ export class SimulatorSource implements SimulatorTrainerSource {
   readonly label = "Virtual trainer";
   readonly kind = "simulator" as const;
   power = 150;
-  private until = 0;
   private timer?: ReturnType<typeof setInterval>;
   private callbacks = new Set<(s: TrainerTelemetrySample) => void>();
   getState() {
@@ -36,12 +35,8 @@ export class SimulatorSource implements SimulatorTrainerSource {
   decreasePower() {
     this.setPower(this.power - 25);
   }
-  sprint() {
-    this.until = Date.now() + 1500;
-    this.emit();
-  }
   sample(now = Date.now()): TrainerTelemetrySample {
-    const power = this.power + (now < this.until ? 300 : 0);
+    const power = this.power;
     return {
       source: "simulator",
       timestampMs: now,

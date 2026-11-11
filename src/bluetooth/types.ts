@@ -50,6 +50,5 @@ export interface TrainerSource {
 export interface SimulatorTrainerSource extends TrainerSource {
   increasePower(): void;
   decreasePower(): void;
-  sprint(): void;
   setPower(watts: number): void;
 }
