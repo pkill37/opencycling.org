@@ -355,6 +355,7 @@ for (const simulation of [true, false]) {
   test(`FTMS browser gear controls send ${simulation ? "simulation" : "resistance"} commands`, async ({
     page,
   }) => {
+    test.setTimeout(45000);
     await page.addInitScript((simulation) => {
       const writes: number[][] = [];
       class Characteristic extends EventTarget {

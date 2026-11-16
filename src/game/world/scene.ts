@@ -589,7 +589,11 @@ export function createWorld(
         riderShadow.rotation.y = point.heading;
         riderShadow.visible = cameraMode === 0;
       }
-      const moving = !engine.paused && !engine.completed && !resting;
+      const moving =
+        !engine.paused &&
+        !engine.completed &&
+        !resting &&
+        state.elapsedSeconds > 0;
       rider.update(
         dt,
         moving ? state.cadenceRpm : 0,
