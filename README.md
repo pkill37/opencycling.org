@@ -355,6 +355,15 @@ parse power/cadence/speed
 feed telemetry into ride engine
 ```
 
+In-game gears use the **Easier** / **Harder** buttons or `[` / `]` during an
+active, opted-in Bluetooth ride. If you started without enabling trainer control,
+click **Enable trainer gears** on the road and confirm to enable it during the ride.
+Disabled controls explain whether to resume, reconnect, or enable control. There are 21 resistance steps, starting at
+neutral gear 11. Each higher gear adds one percentage point to transmitted
+simulation grade, or 2% of the supported resistance range on the fallback path.
+These app-defined steps leave virtual physics unchanged and do not use native
+trainer shifting protocols. Pause preserves the gear; a new ride resets it.
+
 Implemented FTMS control behavior:
 
 ```text
@@ -1649,3 +1658,12 @@ route geometry
 performance
 telemetry
 ```
+
+
+### Local AI races
+
+Every local ride mode (Open Ride, Ghost, and Zombies) includes four computer-controlled cyclists: Ari, Blake, Casey, and Drew. Their different effort levels vary with climbs and a finishing sprint, using the same route physics as the player. Nearby opponents appear in distinct jersey colors. They never connect to or control the trainer.
+
+The HUD's local race leaderboard includes you and all four AI riders, ordered by route progress and then by finish time once riders cross the line. It shows distance gaps, your current position, and completed riders' finish times. Pausing freezes opponents; restarting resets the field. The summary retains your position when the ride ends. Simulator route seeking resets opponents alongside the player. Ghost playback and zombie survival continue alongside the local race; neither becomes a leaderboard rider.
+
+Every new local race waits for the road to finish loading, then shows **1 → 2 → 3 → START**. The player, AI riders, ghost playback, survival timer, and ride clock begin together at START. The countdown waits while the tab is hidden.

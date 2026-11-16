@@ -20,7 +20,7 @@
 
 - Keep simulation deterministic and outside Three.js: trainer/simulator telemetry -> `RideEngine`/physics -> route lookup -> renderer/HUD.
 - Three.js code belongs under `src/game/world` and should render current state only; it must not own cycling physics or route progression.
-- Bluetooth is browser-only and read-only. FTMS is primary, CPS is fallback; do not add native BLE bridges, Electron, ANT+, vendor SDKs, cloud services, or resistance-control writes.
+- Bluetooth is browser-only. FTMS is primary, CPS is fallback. Telemetry is read-only by default; FTMS route resistance and in-game gear control require explicit rider opt-in. Do not add native BLE bridges, Electron, ANT+, vendor SDKs, or cloud services.
 - The 3D world is dynamically imported after starting a ride so the landing page has no WebGL context and stays small; avoid eager Three.js imports in the initial page path.
 
 ## Tests And Artifacts

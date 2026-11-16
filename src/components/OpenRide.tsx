@@ -15,6 +15,12 @@ import { bundledRoutes, loadBundledRoute } from "@/game/route/bundled";
 import RouteMinimap from "./RouteMinimap";
 import PhysicsSettings from "./PhysicsSettings";
 import { RideEngine } from "@/game/loop/engine";
+import {
+  RaceCountdown,
+  type CountdownLabel,
+} from "@/game/modes/race-countdown";
+import { LocalRace, type RaceStanding } from "@/game/modes/local-race";
+import RaceLeaderboard from "./RaceLeaderboard";
 import { ZombiesMode, noZombies } from "@/game/modes/zombies";
 import { SimulatorSource } from "@/bluetooth/sources/simulator-source";
 import { BluetoothTrainerSource } from "@/bluetooth/sources/bluetooth-trainer-source";
@@ -174,6 +180,8 @@ function LoadedOpenRide({
   const source = availability.available ? "bluetooth" : "simulator";
   const [, refresh] = useState(0);
   const [worldLoading, setWorldLoading] = useState(false);
+  const [countdownLabel, setCountdownLabel] = useState<CountdownLabel>(null);
+  const raceStarting = countdownLabel !== null && countdownLabel !== "START";
   const [snapshot, setSnapshot] = useState<RiderState>({
       ...activeEngine.state,
     }),
@@ -188,10 +196,13 @@ function LoadedOpenRide({
     [cps, setCps] = useState(false),
     [controlResistance, setControlResistance] = useState(false),
     [controlActive, setControlActive] = useState(false),
+    [controlRequestPending, setControlRequestPending] = useState(false),
     [zombies, setZombies] = useState(noZombies),
     [summaryReason, setSummaryReason] = useState<
       "finished" | "caught" | "ended"
     >("ended");
+  const localRace = useRef<LocalRace | null>(null);
+  const [standings, setStandings] = useState<RaceStanding[]>([]);
   const host = useRef<HTMLDivElement>(null),
     world = useRef<Awaited<
       ReturnType<typeof import("@/game/world/scene").createWorld>
@@ -235,7 +246,7 @@ function LoadedOpenRide({
     if (controlResistance && source === "bluetooth") {
       if (
         !window.confirm(
-          "Allow OpenCycling.org to change trainer resistance automatically with the route?",
+          "Allow OpenCycling.org to change trainer resistance with the route and your gear shifts?",
         )
       )
         return;
@@ -250,6 +261,8 @@ function LoadedOpenRide({
     const next = new RideEngine(route, { ...physics });
     next.attach(source === "simulator" ? sim : trainer);
     next.enableTrainerControl(hardwareControl);
+    localRace.current = new LocalRace(next);
+    setStandings(localRace.current.standings);
     if (controlWarning) next.setControlWarning(controlWarning);
     if (source === "simulator") next.ingest(sim.sample());
     ghostSamples.current = [
@@ -264,6 +277,7 @@ function LoadedOpenRide({
     setGhostRun(loadGhost(route.id));
     setEngine(next);
     setWorldLoading(true);
+    setCountdownLabel(1);
     setSnapshot({ ...next.state });
     setPaused(false);
     setCamera("Chase");
@@ -285,6 +299,8 @@ function LoadedOpenRide({
   };
   const finish = useCallback(() => {
     activeEngine.setPaused(true);
+    localRace.current?.advance();
+    setStandings(localRace.current?.standings ?? []);
     setSummaryReason("ended");
     setSummary(activeEngine.summary());
     setPhase("summary");
@@ -300,6 +316,7 @@ function LoadedOpenRide({
     };
   }, [activeEngine]);
   const togglePause = useCallback(async () => {
+    if (raceStarting) return;
     if (!activeEngine.paused) {
       activeEngine.setPaused(true);
       setPaused(true);
@@ -317,19 +334,66 @@ function LoadedOpenRide({
     }
     activeEngine.setPaused(false);
     setPaused(false);
-  }, [activeEngine, controlResistance, source, trainer, setWarning]);
+  }, [
+    activeEngine,
+    controlResistance,
+    source,
+    trainer,
+    setWarning,
+    raceStarting,
+  ]);
+  const enableTrainerGears = useCallback(async () => {
+    if (
+      raceStarting ||
+      controlRequestPending ||
+      activeEngine.paused ||
+      activeEngine.completed
+    )
+      return;
+    if (
+      !window.confirm(
+        "Allow OpenCycling.org to change trainer resistance with the route and your gear shifts?",
+      )
+    )
+      return;
+    setControlRequestPending(true);
+    try {
+      if (await activeEngine.requestTrainerControl()) {
+        setControlResistance(true);
+        setControlActive(true);
+        setWarning("");
+      }
+    } catch (error) {
+      const message = `Trainer control unavailable — ${error instanceof Error ? error.message : "The trainer rejected control."}`;
+      activeEngine.setControlWarning(message);
+      setWarning(message);
+      setControlActive(false);
+    } finally {
+      setControlRequestPending(false);
+    }
+  }, [activeEngine, controlRequestPending, setWarning, raceStarting]);
+  const shiftGear = useCallback(
+    (direction: -1 | 1) => {
+      if (raceStarting) return;
+      activeEngine.shiftGear(direction);
+      refresh((value) => value + 1);
+    },
+    [activeEngine, raceStarting],
+  );
   const toggleCamera = useCallback(() => {
     world.current?.toggleCamera();
     setCamera(world.current?.cameraName() ?? "Chase");
   }, []);
   const seekSimulator = useCallback(
     (distanceMeters: number) => {
-      if (phase !== "ride" || source !== "simulator") return;
+      if (phase !== "ride" || source !== "simulator" || raceStarting) return;
       activeEngine.seek(distanceMeters);
+      localRace.current = new LocalRace(activeEngine);
+      setStandings(localRace.current.standings);
       setSnapshot({ ...activeEngine.state });
       setPaused(activeEngine.paused);
     },
-    [activeEngine, phase, source],
+    [activeEngine, phase, source, raceStarting],
   );
   const worldActive = phase !== "home";
   const showingSummary = useRef(false);
@@ -367,6 +431,7 @@ function LoadedOpenRide({
             ghostPlayback,
             elevation,
             prepared,
+            () => localRace.current?.riders ?? [],
           );
           world.current = view;
           setWorldLoading(false);
@@ -380,13 +445,25 @@ function LoadedOpenRide({
           setPaused(true);
           return;
         }
+        const countdown = new RaceCountdown();
+        let previousLabel: CountdownLabel = 1;
         const tick = (now: number) => {
           if (stopped) return;
           const dt = Math.min((now - last) / 1000, 0.25);
           last = now;
-          if (!showingSummary.current) {
-            e.advance(dt);
-            zombiesMode.current?.advance(dt, e.state);
+          const raceDt =
+            document.hidden || showingSummary.current
+              ? 0
+              : countdown.advance(dt);
+          if (countdown.label !== previousLabel) {
+            previousLabel = countdown.label;
+            setCountdownLabel(previousLabel);
+          }
+          if (!showingSummary.current && raceDt > 0) {
+            e.advance(raceDt);
+            localRace.current?.advance();
+            if (!e.paused && !e.completed)
+              zombiesMode.current?.advance(raceDt, e.state);
             if (
               e.state.elapsedSeconds * 1000 - lastGhostSampleMs.current >=
               100
@@ -405,11 +482,11 @@ function LoadedOpenRide({
             zombiesSnapshot.current =
               zombiesMode.current?.snapshot ?? noZombies;
             setSnapshot({ ...e.state });
+            setStandings(localRace.current?.standings ?? []);
             setZombies(zombiesSnapshot.current);
             setPaused(e.paused);
             setWarning(e.warning);
-            if (e.warning.includes("Trainer control unavailable"))
-              setControlActive(false);
+            setControlActive(e.trainerControlActive);
             setFps(Math.round(1 / Math.max(dt, 0.001)));
             published = now;
             if (zombiesSnapshot.current.caught) {
@@ -516,6 +593,7 @@ function LoadedOpenRide({
       )
         return;
       const k = event.key.toLowerCase();
+      if (raceStarting && k !== "escape") return;
       if (
         [
           "arrowup",
@@ -528,10 +606,14 @@ function LoadedOpenRide({
           "h",
           "escape",
           "f3",
+          "[",
+          "]",
           ...presets.map((_, i) => String(i + 1)),
         ].includes(k)
       )
         event.preventDefault();
+      if (!event.repeat && (k === "[" || k === "]"))
+        shiftGear(k === "[" ? -1 : 1);
       if (k === "p") togglePause();
       if (k === "c") toggleCamera();
       if (k === "h") setHud((x) => !x);
@@ -545,7 +627,16 @@ function LoadedOpenRide({
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [phase, source, sim, togglePause, toggleCamera, finish]);
+  }, [
+    phase,
+    source,
+    sim,
+    togglePause,
+    toggleCamera,
+    finish,
+    shiftGear,
+    raceStarting,
+  ]);
   const menuRoute = routeLoading
     ? bundledRoutes.find((entry) => entry.key === loadingRouteKey)
     : undefined;
@@ -853,7 +944,7 @@ function LoadedOpenRide({
                     <strong>Control trainer resistance</strong>
                     <small>
                       Optional. The trainer may change resistance automatically
-                      with the route.
+                      with the route and your gear shifts.
                     </small>
                   </span>
                 </label>
@@ -928,6 +1019,7 @@ function LoadedOpenRide({
                     )}
                   </div>
                 </div>
+                <RaceLeaderboard standings={standings} />
               </div>
               <div className={styles.routeHud}>
                 {profile}
@@ -1018,6 +1110,74 @@ function LoadedOpenRide({
               )}
             </div>
           )}
+          {source === "bluetooth" && (
+            <div
+              className={styles.gearControls}
+              role="group"
+              aria-label="Trainer gears"
+            >
+              {(!activeEngine.trainerControlActive || raceStarting) && (
+                <div className={styles.gearAvailability}>
+                  {raceStarting ? (
+                    <span>Gears unlock at START.</span>
+                  ) : paused ? (
+                    <span>Resume the ride to shift gears.</span>
+                  ) : trainer.state !== "connected" ? (
+                    <span>Connect your trainer to enable gears.</span>
+                  ) : canControl ? (
+                    <>
+                      <span>Enable trainer control to shift gears.</span>
+                      <button
+                        className="button"
+                        disabled={controlRequestPending}
+                        onClick={() => void enableTrainerGears()}
+                      >
+                        {controlRequestPending
+                          ? "Enabling trainer gears…"
+                          : "Enable trainer gears"}
+                      </button>
+                    </>
+                  ) : (
+                    <span>
+                      {trainer.controlStatusMessage ||
+                        (trainer.kind === "bluetooth-cps"
+                          ? "Gears require a controllable trainer connection. Reconnect without Cycling Power mode."
+                          : "This connection does not offer trainer resistance control. Try reconnecting your trainer.")}
+                    </span>
+                  )}
+                </div>
+              )}
+              <div className={styles.gearButtons}>
+                <button
+                  className="button"
+                  aria-label="Easier gear"
+                  title="Easier gear ([)"
+                  disabled={
+                    raceStarting ||
+                    !activeEngine.trainerControlActive ||
+                    activeEngine.selectedGear === 1
+                  }
+                  onClick={() => shiftGear(-1)}
+                >
+                  − Easier
+                </button>
+                <span role="status">Gear {activeEngine.selectedGear} / 21</span>
+                <button
+                  className="button"
+                  aria-label="Harder gear"
+                  title="Harder gear (])"
+                  disabled={
+                    raceStarting ||
+                    !activeEngine.trainerControlActive ||
+                    activeEngine.selectedGear === 21
+                  }
+                  onClick={() => shiftGear(1)}
+                >
+                  Harder +
+                </button>
+              </div>
+            </div>
+          )}
           {warning && (
             <div className={styles.warning} role="alert">
               {warning}
@@ -1051,6 +1211,24 @@ function LoadedOpenRide({
           )}
         </>
       )}
+      {phase === "ride" &&
+        !worldLoading &&
+        !worldError &&
+        countdownLabel !== null && (
+          <div
+            className={styles.countdown}
+            role="status"
+            aria-label="Race countdown"
+          >
+            <span>{countdownLabel === "START" ? "RACE ON" : "GET READY"}</span>
+            <strong key={countdownLabel}>{countdownLabel}</strong>
+            <p>
+              {countdownLabel === "START"
+                ? "You and the AI riders are racing."
+                : "You and the AI riders start together."}
+            </p>
+          </div>
+        )}
       {worldLoading && phase === "ride" && (
         <div className={styles.pauseCard} role="status">
           Loading {route.name}…
@@ -1098,6 +1276,15 @@ function LoadedOpenRide({
                 ? "Route complete"
                 : "Ride ended early"}
           </p>
+          {standings.length > 0 && (
+            <p>
+              Local race · {standings.find((rider) => rider.isPlayer)?.rank} /{" "}
+              {standings.length}
+              {activeEngine.completed
+                ? " at the finish"
+                : " when the ride ended"}
+            </p>
+          )}
           <div className={styles.summaryGrid}>
             {metric(
               "DISTANCE",

@@ -97,7 +97,9 @@ export function LandingGuide() {
           Only when you explicitly enable trainer control during setup. FTMS
           simulation-grade control is preferred, with resistance-level fallback;
           unsupported or CPS-only trainers remain read-only. Virtual physics
-          continues if hardware control is unavailable.
+          continues if hardware control is unavailable. During a controlled
+          ride, use Easier/Harder or the bracket keys to adjust trainer
+          resistance.
         </p>
       </details>
       <details>

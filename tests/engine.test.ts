@@ -301,3 +301,255 @@ test("summary weights changing power by elapsed time and starts at zero", () => 
   assert.equal(summary.maxPowerWatts, 300);
   assert.equal(summary.averageSpeedMetersPerSecond, summary.distanceMeters / 4);
 });
+
+function gearFixture(simulation = true) {
+  const grades: number[] = [];
+  const levels: number[] = [];
+  const capabilities: TrainerControlCapabilities = {
+    supported: true,
+    supportsSimulationParameters: simulation,
+    supportsResistanceLevel: true,
+    resistanceRange: { min: 2, max: 22, step: 0.5 },
+  };
+  const source = {
+    ...fake,
+    controlCapabilities: capabilities,
+    requestControl: async () => {},
+    setSimulationParameters: async (parameters: { gradePercent: number }) => {
+      grades.push(parameters.gradePercent);
+    },
+    setTargetResistance: async (level: number) => {
+      levels.push(level);
+    },
+    releaseControl: async () => {},
+  };
+  const engine = new RideEngine(route);
+  engine.attach(source, 0);
+  engine.enableTrainerControl(true);
+  return { engine, source, grades, levels };
+}
+const flushControl = () =>
+  new Promise<void>((resolve) => setImmediate(resolve));
+
+// The clock controls the hardware rate limit, independently of simulation time.
+async function withControlClock(
+  run: (tick: () => Promise<void>) => Promise<void>,
+  engine: RideEngine,
+) {
+  const originalNow = Date.now;
+  let now = 1000;
+  Date.now = () => now;
+  try {
+    await run(async () => {
+      now += 250;
+      engine.seek(0);
+      engine.state.speedMetersPerSecond = 0;
+      engine.step(1 / 60, 300, 80);
+      await flushControl();
+    });
+  } finally {
+    Date.now = originalNow;
+  }
+}
+
+test("gear steps offset transmitted grade, preserve physics and clamp at both limits", async () => {
+  const { engine, grades } = gearFixture();
+  await withControlClock(async (tick) => {
+    await tick();
+    const neutral = grades[0];
+    const physics = new RideEngine(route);
+    physics.step(1 / 60, 300, 80);
+    assert.deepEqual(engine.state, physics.state);
+    engine.shiftGear(1);
+    await tick();
+    assert.equal(grades[1], neutral + 1);
+    physics.seek(0);
+    physics.state.speedMetersPerSecond = 0;
+    physics.step(1 / 60, 300, 80);
+    assert.deepEqual(engine.state, physics.state);
+    engine.shiftGear(-1);
+    engine.shiftGear(-1);
+    await tick();
+    assert.equal(grades[2], neutral - 1);
+    for (let i = 0; i < 30; i++) engine.shiftGear(-1);
+    assert.equal(engine.selectedGear, 1);
+    for (let i = 0; i < 30; i++) engine.shiftGear(1);
+    assert.equal(engine.selectedGear, 21);
+    await tick();
+    assert.equal(grades[3], neutral + 10);
+  }, engine);
+  assert.equal(new RideEngine(route).selectedGear, 11);
+});
+
+test("resistance gears smooth toward bounded, quantized easier and harder targets", async () => {
+  const { engine, levels } = gearFixture(false);
+  await withControlClock(async (tick) => {
+    for (let i = 0; i < 25; i++) await tick();
+    const neutral = levels.at(-1)!;
+    for (let i = 0; i < 10; i++) engine.shiftGear(1);
+    for (let i = 0; i < 25; i++) await tick();
+    const harder = levels.at(-1)!;
+    assert.ok(Math.abs(harder - neutral - 4) <= 0.5);
+    for (let i = 0; i < 20; i++) engine.shiftGear(-1);
+    for (let i = 0; i < 25; i++) await tick();
+    assert.ok(levels.at(-1)! < neutral);
+    for (const [index, level] of levels.entries()) {
+      assert.ok(level >= 2 && level <= 22);
+      assert.equal((level - 2) % 0.5, 0);
+      if (index) assert.ok(Math.abs(level - levels[index - 1]) <= 1);
+    }
+  }, engine);
+});
+
+test("busy control coalesces shifts and rate limits writes", async () => {
+  const { engine, source, grades } = gearFixture();
+  let complete!: () => void;
+  source.setSimulationParameters = async ({ gradePercent }) => {
+    grades.push(gradePercent);
+    await new Promise<void>((resolve) => {
+      complete = resolve;
+    });
+  };
+  await withControlClock(async (tick) => {
+    await tick();
+    engine.shiftGear(1);
+    engine.shiftGear(1);
+    engine.shiftGear(1);
+    await tick();
+    assert.equal(grades.length, 1);
+    complete();
+    await flushControl();
+    engine.step(1 / 60, 300, 80);
+    await flushControl();
+    assert.equal(grades.length, 2);
+    assert.ok(Math.abs(grades[1] - grades[0] - 3) < 0.01);
+    complete();
+    await flushControl();
+    engine.step(1 / 60, 300, 80);
+    assert.equal(grades.length, 2);
+  }, engine);
+});
+
+test("paused or disposed simulation rejection cannot trigger resistance fallback", async () => {
+  for (const dispose of [false, true]) {
+    const { engine, source, levels } = gearFixture();
+    let reject!: (error: Error) => void;
+    source.setSimulationParameters = async () =>
+      new Promise<void>((_, fail) => {
+        reject = fail;
+      });
+    engine.shiftGear(1);
+    await withControlClock(async (tick) => {
+      await tick();
+      if (dispose) engine.dispose();
+      else engine.setPaused(true);
+      engine.shiftGear(1);
+      assert.equal(engine.selectedGear, 12);
+      reject(new Error("late rejection"));
+      await flushControl();
+      assert.equal(levels.length, 0);
+      assert.equal(engine.trainerControlActive, false);
+      assert.equal(engine.warning, "");
+      engine.setPaused(false);
+      engine.enableTrainerControl(true);
+      assert.equal(engine.selectedGear, 12);
+    }, engine);
+  }
+});
+
+test("gear control disables without consent, on disconnect, permission loss and rejection", async () => {
+  for (const failure of ["consent", "disconnect", "permission", "rejection"]) {
+    const { engine, source } = gearFixture();
+    if (failure === "consent") engine.enableTrainerControl(false);
+    if (failure === "disconnect") source.getState = () => "disconnected";
+    if (failure === "permission") source.controlCapabilities.supported = false;
+    if (failure === "rejection") {
+      source.controlCapabilities.supportsResistanceLevel = false;
+      source.setSimulationParameters = async () => {
+        throw new Error("Rejected");
+      };
+    }
+    await withControlClock(async (tick) => {
+      await tick();
+    }, engine);
+    assert.equal(engine.trainerControlActive, false);
+    engine.shiftGear(1);
+    assert.equal(engine.selectedGear, 11);
+    if (failure !== "consent")
+      assert.match(engine.warning, /Trainer control unavailable/);
+  }
+});
+
+test("simulation rejection preserves the selected gear on resistance fallback", async () => {
+  const { engine, source, levels } = gearFixture();
+  let simulationAttempts = 0;
+  source.setSimulationParameters = async () => {
+    simulationAttempts++;
+    throw new Error("Simulation unsupported");
+  };
+  for (let i = 0; i < 10; i++) engine.shiftGear(1);
+  await withControlClock(async (tick) => {
+    for (let i = 0; i < 25; i++) await tick();
+    const harder = levels.at(-1)!;
+    for (let i = 0; i < 10; i++) engine.shiftGear(-1);
+    for (let i = 0; i < 25; i++) await tick();
+    assert.ok(Math.abs(harder - levels.at(-1)! - 4) <= 0.5);
+    assert.equal(simulationAttempts, 1);
+    assert.equal(engine.trainerControlActive, true);
+  }, engine);
+});
+
+test("trainer gears can be enabled after a read-only ride has started", async () => {
+  const { engine, source } = gearFixture();
+  engine.enableTrainerControl(false);
+  let acknowledge!: () => void;
+  source.requestControl = async () =>
+    new Promise<void>((resolve) => {
+      acknowledge = resolve;
+    });
+  const request = engine.requestTrainerControl();
+  assert.equal(engine.trainerControlActive, false);
+  engine.shiftGear(1);
+  assert.equal(engine.selectedGear, 11);
+  assert.equal(await engine.requestTrainerControl(), false);
+  acknowledge();
+  assert.equal(await request, true);
+  engine.shiftGear(1);
+  assert.equal(engine.selectedGear, 12);
+  assert.equal(engine.trainerControlActive, true);
+});
+
+test("pending live control requests cannot enable gears after pause or disposal", async () => {
+  for (const dispose of [false, true]) {
+    const { engine, source } = gearFixture();
+    engine.enableTrainerControl(false);
+    let acknowledge!: () => void;
+    let releases = 0;
+    source.requestControl = async () =>
+      new Promise<void>((resolve) => {
+        acknowledge = resolve;
+      });
+    source.releaseControl = async () => {
+      releases++;
+    };
+    const request = engine.requestTrainerControl();
+    if (dispose) engine.dispose();
+    else engine.setPaused(true);
+    acknowledge();
+    assert.equal(await request, false);
+    assert.equal(engine.trainerControlActive, false);
+    assert.equal(releases, 1);
+  }
+});
+
+test("rejected live control acquisition stays read-only and can be retried", async () => {
+  const { engine, source } = gearFixture();
+  engine.enableTrainerControl(false);
+  source.requestControl = async () => {
+    throw new Error("Control not permitted");
+  };
+  await assert.rejects(engine.requestTrainerControl(), /Control not permitted/);
+  assert.equal(engine.trainerControlActive, false);
+  source.requestControl = async () => {};
+  assert.equal(await engine.requestTrainerControl(), true);
+});

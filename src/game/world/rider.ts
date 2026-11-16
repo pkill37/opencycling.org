@@ -53,11 +53,11 @@ function sculpt(sections: Section[], sides = 20) {
   return createTexturedGeometry(positions, uvs, indices);
 }
 
-function jerseyTexture() {
+function jerseyTexture(color: string) {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 256;
   const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = "#c34d32";
+  ctx.fillStyle = color;
   ctx.fillRect(0, 0, 256, 256);
   ctx.fillStyle = "#303d3e";
   ctx.fillRect(43, 0, 28, 256);
@@ -87,7 +87,7 @@ function jerseyTexture() {
   return texture;
 }
 
-export function createRider() {
+export function createRider(jerseyColor = "#c34d32") {
   const group = new T.Group();
   group.name = "Cyclist";
   const bike = new T.Group(),
@@ -115,11 +115,11 @@ export function createRider() {
   });
   const skin = new T.MeshStandardMaterial({ color: 0xb98465, roughness: 0.8 });
   const kit = new T.MeshStandardMaterial({
-    map: jerseyTexture(),
+    map: jerseyTexture(jerseyColor),
     roughness: 0.94,
   });
   const sleeves = new T.MeshStandardMaterial({
-    color: 0xc34d32,
+    color: jerseyColor,
     roughness: 0.94,
   });
   const bib = new T.MeshStandardMaterial({ color: 0x232a2e, roughness: 0.98 });

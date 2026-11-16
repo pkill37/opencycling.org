@@ -78,7 +78,11 @@ export function clampResistance(
 ) {
   const range = capabilities.resistanceRange ?? { min: 0, max: 100, step: 0.1 };
   const clamped = Math.max(range.min, Math.min(range.max, level));
-  return Math.round(clamped / range.step) * range.step;
+  const steps = Math.min(
+    Math.floor((range.max - range.min) / range.step),
+    Math.round((clamped - range.min) / range.step),
+  );
+  return range.min + steps * range.step;
 }
 export function resistanceForGrade(
   gradient: number,

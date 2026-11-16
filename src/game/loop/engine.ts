@@ -45,6 +45,25 @@ export class RideEngine {
     return this.completed ? this.state.elapsedSeconds : this.presentationTime;
   }
   private speedLimits: number[];
+  private gear = 11;
+  get selectedGear() {
+    return this.gear;
+  }
+  get trainerControlActive() {
+    return (
+      this.trainerControl &&
+      !this.paused &&
+      !this.completed &&
+      this.source?.getState() === "connected" &&
+      Boolean(this.source.controlCapabilities?.supported)
+    );
+  }
+  shiftGear(direction: -1 | 1) {
+    if (!this.trainerControlActive) return;
+    this.gear = Math.max(1, Math.min(21, this.gear + direction));
+  }
+  private controlRequested = false;
+  private controlGeneration = 0;
   private trainerControl = false;
   private controlBusy = false;
   private lastControlMs = 0;
@@ -63,8 +82,8 @@ export class RideEngine {
   setPaused(paused: boolean) {
     this.paused = paused;
     if (paused) this.accumulator = 0;
-    if (paused && this.trainerControl) {
-      this.trainerControl = false;
+    if (paused && (this.trainerControl || this.controlRequested)) {
+      this.enableTrainerControl(false);
       const control = this.source as
         (TrainerSource & Partial<TrainerControlSource>) | undefined;
       void control?.releaseControl?.();
@@ -87,14 +106,49 @@ export class RideEngine {
     this.presentationTime = this.state.elapsedSeconds;
   }
   enableTrainerControl(enabled: boolean) {
+    this.controlGeneration++;
+    this.controlRequested = false;
     this.trainerControl = enabled;
+    this.lastControlMs = -Infinity;
     if (enabled) this.controlWarning = "";
+  }
+  async requestTrainerControl(): Promise<boolean> {
+    if (this.trainerControlActive) return true;
+    if (this.controlRequested) return false;
+    const control = this.source as
+      (TrainerSource & Partial<TrainerControlSource>) | undefined;
+    if (this.paused || this.completed || control?.getState() !== "connected")
+      throw new Error("Resume the ride with a connected trainer first.");
+    if (!control.controlCapabilities?.supported || !control.requestControl)
+      throw new Error(
+        "This trainer connection does not support resistance control.",
+      );
+    const generation = ++this.controlGeneration;
+    this.controlRequested = true;
+    try {
+      await control.requestControl();
+      if (generation !== this.controlGeneration) return false;
+      if (this.paused || this.completed || control.getState() !== "connected") {
+        this.enableTrainerControl(false);
+        await control.releaseControl?.();
+        return false;
+      }
+      this.enableTrainerControl(true);
+      this.warning = "";
+      return true;
+    } catch (error) {
+      if (generation !== this.controlGeneration) return false;
+      throw error;
+    } finally {
+      if (generation === this.controlGeneration) this.controlRequested = false;
+    }
   }
   setControlWarning(message: string) {
     this.controlWarning = message;
     this.warning = message;
   }
   attach(source: TrainerSource, now = Date.now()) {
+    this.enableTrainerControl(false);
     this.unsubscribe?.();
     this.samples.clear();
     this.fieldTimes.clear();
@@ -286,12 +340,12 @@ export class RideEngine {
     };
   }
   dispose() {
-    if (this.trainerControl) {
+    if (this.trainerControl || this.controlRequested) {
       const control = this.source as
         (TrainerSource & Partial<TrainerControlSource>) | undefined;
       void control?.releaseControl?.();
     }
-    this.trainerControl = false;
+    this.enableTrainerControl(false);
     this.unsubscribe?.();
     this.unsubscribe = undefined;
   }
@@ -301,27 +355,40 @@ export class RideEngine {
     heading: number,
   ) {
     if (!this.trainerControl || this.controlBusy || !this.source) return;
+    if (!this.trainerControlActive) {
+      this.enableTrainerControl(false);
+      this.setControlWarning(
+        "Trainer control unavailable — " +
+          ((this.source as TrainerSource & Partial<TrainerControlSource>)
+            .controlStatusMessage ||
+            "trainer disconnected or control permission lost; using virtual resistance only."),
+      );
+      return;
+    }
+    const generation = this.controlGeneration;
+    const isCurrent = () =>
+      generation === this.controlGeneration && this.trainerControlActive;
     const control = this.source as TrainerSource &
       Partial<TrainerControlSource>;
     const capabilities = control.controlCapabilities;
-    if (!capabilities?.supported) {
-      if (control.controlStatusMessage) {
-        this.trainerControl = false;
-        this.setControlWarning(control.controlStatusMessage);
-      }
-      return;
-    }
+    if (!capabilities?.supported) return;
     const now = Date.now();
     if (now - this.lastControlMs < 250) return;
     this.lastControlMs = now;
     this.controlBusy = true;
-    const targetResistance = resistanceForGrade(
-      gradient,
-      speed,
-      this.config,
+    const gearOffset = this.gear - 11;
+    const range = capabilities.resistanceRange ?? {
+      min: 0,
+      max: 100,
+      step: 0.1,
+    };
+    const targetResistance = clampResistance(
+      resistanceForGrade(gradient, speed, this.config, capabilities) +
+        gearOffset * 0.02 * (range.max - range.min),
       capabilities,
     );
     const sendResistance = async () => {
+      if (!isCurrent()) return;
       if (!control.setTargetResistance)
         throw new Error("Trainer resistance control is unavailable.");
       const range = capabilities.resistanceRange ?? {
@@ -337,7 +404,7 @@ export class RideEngine {
       );
       const next = clampResistance(smoothed, capabilities);
       await control.setTargetResistance(next);
-      this.lastResistance = next;
+      if (isCurrent()) this.lastResistance = next;
     };
     const operation = async () => {
       if (
@@ -350,12 +417,13 @@ export class RideEngine {
             windSpeedMetersPerSecond:
               this.config.windEast * Math.sin(heading) +
               this.config.windNorth * Math.cos(heading),
-            gradePercent: gradient * 100,
+            gradePercent: gradient * 100 + gearOffset,
             rollingResistanceCoefficient: this.config.crr,
             windResistanceCoefficient: this.config.cda * this.config.airDensity,
           });
           return;
         } catch (error) {
+          if (!isCurrent()) return;
           if (!capabilities.supportsResistanceLevel) throw error;
           this.simulationControlFailed = true;
           this.logControlFallback(error);
@@ -369,7 +437,8 @@ export class RideEngine {
     };
     void operation()
       .catch((error: unknown) => {
-        this.trainerControl = false;
+        if (!isCurrent()) return;
+        this.enableTrainerControl(false);
         this.setControlWarning(
           `Trainer control unavailable — virtual resistance only. ${error instanceof Error ? error.message : "Command rejected."}`,
         );

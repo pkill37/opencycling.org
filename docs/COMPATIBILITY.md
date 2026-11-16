@@ -31,9 +31,13 @@ Record these control fields during hardware validation: target-setting feature b
 6. Cancel the chooser, deny access, select an unsupported device via debug scan, and connect while another app owns the trainer. Confirm useful errors and simulator availability.
 7. Test a CPS-only device and the explicit Cycling Power option. Check cadence while pedaling, stopping, restarting and across event counter rollovers.
 8. With an FTMS trainer, confirm the setup checkbox is off by default. Enable it, confirm consent, verify simulation-grade commands and resistance-level fallback, and reject a command to confirm virtual-only continuation.
-9. Pause, finish, disconnect, reconnect, and compete with another trainer application while control is active. Confirm commands stop and a fresh control session is required.
-10. Complete one lap. Confirm distance equals route length, rider stops, and summary shows plausible time-weighted average power and elevation gain. Restart and return to setup.
-11. Background the tab and return. It should remain paused and exclude background time.
-12. Measure F3 frame rates on actual desktop and weaker/mobile devices. Target 60 FPS desktop, at least 30 FPS weaker devices; this is not yet a hardware-verified guarantee.
+9. Start once without the control checkbox. Confirm gears explain why they are disabled, then click **Enable trainer gears** on the road. Declining must keep the ride read-only; accepting must enable shifting without restarting.
+10. Use Easier/Harder and `[`/`]` while pedaling. Confirm gear 11 is neutral, higher gears feel harder, route changes still affect load, and both limits remain usable. Verify shifting is disabled without consent and while paused; resume preserves the gear and a new ride resets it. Record gear range and feel for the device.
+11. Pause, finish, disconnect, reconnect, and compete with another trainer application while control is active. Confirm commands stop and a fresh control session is required.
+12. Complete one lap. Confirm distance equals route length, rider stops, and summary shows plausible time-weighted average power and elevation gain. Restart and return to setup.
+13. Background the tab and return. It should remain paused and exclude background time.
+14. Measure F3 frame rates on actual desktop and weaker/mobile devices. Target 60 FPS desktop, at least 30 FPS weaker devices; this is not yet a hardware-verified guarantee.
 
 Simulator: ↑/W +25 W, ↓/S −25 W, 1–9 = 100/150/200/250/300/400/500/600/800 W, Space +300 W for 1.5 s. C camera, H HUD, P pause, Esc finish, F3 debug. Touch controls provide equivalent basic riding actions.
+
+Trainer gears: Easier/Harder buttons or `[`/`]`, with 21 resistance steps starting at gear 11. Each step adjusts the transmitted simulation grade by one percentage point, or target resistance by 2% of its supported range. Virtual route physics is unchanged. This uses generic FTMS resistance control, not trainer-native virtual shifting.

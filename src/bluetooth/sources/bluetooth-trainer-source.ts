@@ -55,6 +55,7 @@ export class BluetoothTrainerSource
   private statusListener?: EventListener;
   private controlQueue = Promise.resolve();
   private controlEnabled = false;
+  private controlGeneration = 0;
   private pendingControlCancellations = new Set<() => void>();
   subscribeChanges(callback: () => void) {
     this.changeCallbacks.add(callback);
@@ -93,6 +94,7 @@ export class BluetoothTrainerSource
     this.setState("disconnected");
   };
   private cleanup() {
+    this.controlGeneration++;
     for (const cancel of this.pendingControlCancellations) cancel();
     this.pendingControlCancellations.clear();
     for (const [char, listener] of this.listeners)
@@ -125,7 +127,10 @@ export class BluetoothTrainerSource
   async requestControl() {
     if (!this.controlCapabilities.supported || !this.controlPoint)
       throw new Error("Trainer control is unavailable.");
+    const generation = this.controlGeneration;
     await this.sendControl(encodeRequestControl(), 0x00);
+    if (generation !== this.controlGeneration)
+      throw new Error("Trainer control session changed.");
     this.controlEnabled = true;
   }
   async setSimulationParameters(parameters: SimulationParameters) {
@@ -150,6 +155,7 @@ export class BluetoothTrainerSource
     );
   }
   async releaseControl() {
+    this.controlGeneration++;
     this.controlEnabled = false;
     if (!this.controlPoint) return;
     try {
@@ -160,8 +166,13 @@ export class BluetoothTrainerSource
   }
   private sendControl(payload: Uint8Array, request: number) {
     const generation = this.generation;
+    const controlGeneration = this.controlGeneration;
     const run = async () => {
-      if (generation !== this.generation || !this.controlPoint)
+      if (
+        generation !== this.generation ||
+        controlGeneration !== this.controlGeneration ||
+        !this.controlPoint
+      )
         throw new Error("Trainer connection changed during control command.");
       const characteristic = this.controlPoint;
       const response = new Promise<void>((resolve, reject) => {
@@ -408,6 +419,7 @@ export class BluetoothTrainerSource
                   if (!value || value.byteLength < 1) return;
                   // 0xFF is Control Permission Lost in FTMS 1.0.1.
                   if (value.getUint8(0) === 0xff) {
+                    this.controlGeneration++;
                     this.controlEnabled = false;
                     this.controlCapabilities = {
                       ...this.controlCapabilities,

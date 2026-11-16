@@ -9,6 +9,7 @@ import {
 import { BluetoothTrainerSource } from "../src/bluetooth/sources/bluetooth-trainer-source";
 import * as U from "../src/bluetooth/constants";
 import {
+  clampResistance,
   encodeRequestControl,
   encodeSetSimulationParameters,
   encodeSetTargetResistance,
@@ -297,6 +298,13 @@ test("FTMS control writes use acknowledged control-point transactions", async ()
     await trainer.requestControl();
     await trainer.setTargetResistance(4.2);
     assert.deepEqual(control.writes.slice(0, 2), [[0x00], [0x04, 42, 0]]);
+    // A queued write must not execute after release invalidates its session.
+    const queued = trainer.setTargetResistance(8);
+    const released = trainer.releaseControl();
+    const results = await Promise.allSettled([queued, released]);
+    assert.equal(results[0].status, "rejected");
+    assert.deepEqual(control.writes.at(-1), [0x08, 0x01]);
+    assert.equal(control.writes.filter((bytes) => bytes[0] === 0x04).length, 1);
     await trainer.disconnect();
   } finally {
     restoreBrowser();
@@ -314,4 +322,16 @@ test("trainer change subscribers can unsubscribe independently", async () => {
   await trainer.disconnect();
   assert.equal(first, 1);
   assert.equal(second, 2);
+});
+
+test("resistance quantization is anchored at the advertised minimum and stays in range", () => {
+  const capabilities = {
+    supported: true,
+    supportsSimulationParameters: false,
+    supportsResistanceLevel: true,
+    resistanceRange: { min: 0.3, max: 2, step: 0.5 },
+  };
+  assert.equal(clampResistance(-100, capabilities), 0.3);
+  assert.equal(clampResistance(100, capabilities), 1.8);
+  assert.equal(clampResistance(0.9, capabilities), 0.8);
 });

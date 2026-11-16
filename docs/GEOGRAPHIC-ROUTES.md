@@ -2,7 +2,7 @@
 
 ## Virtual gradient and optional trainer resistance
 
-Route gradients always feed OpenCycling.org's deterministic virtual physics. An FTMS trainer may optionally receive the same route grade after the rider explicitly enables control; simulation parameters are preferred and target resistance is used only when necessary. Hardware control is never required for route progression, and a rejected or disconnected command falls back to virtual resistance without stopping the ride.
+Route gradients always feed OpenCycling.org's deterministic virtual physics. An FTMS trainer may optionally receive route grade adjusted by the selected in-game gear after the rider explicitly enables control; simulation parameters are preferred and target resistance is used only when necessary. Hardware control is never required for route progression, and a rejected or disconnected command falls back to virtual resistance without stopping the ride.
 
 ## Delivery status
 
@@ -162,8 +162,9 @@ texture ownership includes unused assets and late-loading textures on teardown.
   exceeds available braking. Braking loss integrates force × distance.
 - The target is a training assumption, **not a safe outdoor corner speed**. Grip,
   camber, surface and raw curvature have not been independently validated.
-- FTMS-primary/CPS-fallback remains browser-only and read-only. Terrain changes
-  virtual speed, never trainer resistance.
+- FTMS-primary/CPS-fallback remains browser-only. Terrain always changes virtual
+  speed; optional FTMS control also sends route grade with the rider’s gear offset
+  to the trainer after explicit consent. CPS remains read-only.
 
 ## Budgets and release gates
 

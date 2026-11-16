@@ -4,6 +4,7 @@ import * as T from "three";
 import { lookupRoute } from "../route/route";
 import type { CyclingRoute } from "../../types";
 import type { RideEngine } from "../loop/engine";
+import { localOpponents, type RaceRider } from "../modes/local-race";
 import type { ZombiesSnapshot } from "../modes/zombies";
 import { createAtmosphere, SUN_DIRECTION } from "./atmosphere";
 import { createRider } from "./rider";
@@ -336,6 +337,7 @@ export function createWorld(
   getGhost?: () => GhostPlayback | undefined,
   elevation?: ElevationSampler,
   prepared?: TerrainTileData[],
+  getRaceRiders?: () => RaceRider[],
 ) {
   const route = engine.course;
   const scene = new T.Scene();
@@ -417,6 +419,12 @@ export function createWorld(
   addStartGate(scene, route, scenery.groundAt);
   const finishScene = addFinishTunnel(scene, route, scenery.groundAt);
   const rider = createRider();
+  const npcRiders = localOpponents.map((profile) => {
+    const npc = createRider(profile.color);
+    npc.group.name = `NPC ${profile.name}`;
+    scene.add(npc.group);
+    return npc;
+  });
   const ghostRider = createRider();
   ghostRider.group.traverse((object) => {
     if (!(object instanceof T.Mesh)) return;
@@ -588,6 +596,34 @@ export function createWorld(
         moving ? state.speedMetersPerSecond : 0,
         resting,
       );
+      const raceRiders = getRaceRiders?.() ?? [];
+      npcRiders.forEach((npc, index) => {
+        const competitor = raceRiders[index];
+        npc.group.visible =
+          !!competitor &&
+          Math.abs(competitor.state.distanceMeters - state.distanceMeters) <
+            220;
+        if (!competitor || !npc.group.visible) return;
+        const pose = roadPose(competitor.state.distanceMeters, route);
+        npc.group.position.set(
+          pose.x + Math.cos(pose.heading) * competitor.lane,
+          pose.y + 0.035,
+          pose.z - Math.sin(pose.heading) * competitor.lane,
+        );
+        npc.group.rotation.set(
+          -Math.atan(pose.gradient),
+          pose.heading,
+          0,
+          "YXZ",
+        );
+        const pedaling = moving && competitor.finishTimeSeconds === undefined;
+        npc.update(
+          dt,
+          pedaling ? competitor.state.cadenceRpm : 0,
+          pedaling ? competitor.state.speedMetersPerSecond : 0,
+          resting,
+        );
+      });
       const ghost = getGhost?.();
       if (ghost?.visible) {
         const ghostPoint = roadPose(ghost.distanceMeters, route);

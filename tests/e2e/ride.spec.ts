@@ -1,10 +1,14 @@
 import { startRide } from "./helpers";
 import { test, expect, type Page } from "@playwright/test";
 
+const flatGearGpx = `<gpx><trk><name>Flat gears</name><trkseg>${Array.from(
+  { length: 11 },
+  (_, index) =>
+    `<trkpt lat="${45 + index * 0.001}" lon="6"><ele>700</ele></trkpt>`,
+).join("")}</trkseg></trk></gpx>`;
+
 async function prepareImportedRide(page: Page, name: string, gpx: string) {
   await page.goto("/ride/");
-  await page.getByText("Debug settings", { exact: true }).click();
-  await page.getByText("Import GPX or route package", { exact: true }).click();
   await page.getByLabel("Route file").setInputFiles({
     name,
     mimeType: "application/gpx+xml",
@@ -253,6 +257,7 @@ test("mouse orbit and wheel zoom control the ride camera", async ({ page }) => {
 test("FTMS browser notifications drive the ride and disconnect offers reconnect", async ({
   page,
 }) => {
+  test.setTimeout(45000);
   await page.addInitScript(() => {
     class BikeData extends EventTarget {
       uuid = "00002ad2-0000-1000-8000-00805f9b34fb";
@@ -301,7 +306,8 @@ test("FTMS browser notifications drive the ride and disconnect offers reconnect"
       device.dispatchEvent(new Event("gattserverdisconnected"));
     });
   });
-  await page.goto("/");
+  await prepareImportedRide(page, "flat.gpx", flatGearGpx);
+  await page.getByRole("button", { name: "Use reviewed preview" }).click();
   await expect(page.getByRole("button", { name: "Start" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Use simulator" })).toHaveCount(
     0,
@@ -315,6 +321,15 @@ test("FTMS browser notifications drive the ride and disconnect offers reconnect"
   await expect(page.getByText("250 W · 90 rpm · 36.0 km/h raw")).toBeVisible();
   await startRide(page);
   await expect(page.getByText("LIVE TRAINER", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Easier gear" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Harder gear" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("group", { name: "Trainer gears" }),
+  ).toContainText("does not offer trainer resistance control");
   await expect(page.locator('[class*="power"] strong')).toHaveText("250W");
   await page.evaluate(() =>
     window.dispatchEvent(new Event("test-trainer-disconnect")),
@@ -335,3 +350,166 @@ test("FTMS browser notifications drive the ride and disconnect offers reconnect"
     0,
   );
 });
+
+for (const simulation of [true, false]) {
+  test(`FTMS browser gear controls send ${simulation ? "simulation" : "resistance"} commands`, async ({
+    page,
+  }) => {
+    await page.addInitScript((simulation) => {
+      const writes: number[][] = [];
+      class Characteristic extends EventTarget {
+        value = new DataView(new ArrayBuffer(0));
+        properties = { indicate: true, write: true };
+        async startNotifications() {
+          return this;
+        }
+        async writeValueWithResponse(buffer: ArrayBuffer) {
+          const bytes = Array.from(new Uint8Array(buffer));
+          writes.push(bytes);
+          document.documentElement.dataset.controlWrites =
+            JSON.stringify(writes);
+          this.value = new DataView(Uint8Array.of(0x80, bytes[0], 1).buffer);
+          this.dispatchEvent(new Event("characteristicvaluechanged"));
+        }
+      }
+      const control = new Characteristic();
+      const telemetry = new Characteristic();
+      telemetry.value = new DataView(
+        Uint8Array.of(0x44, 0, 0x10, 0x0e, 180, 0, 250, 0).buffer,
+      );
+      const status = new Characteristic();
+      const device = new EventTarget() as EventTarget & {
+        name: string;
+        gatt: unknown;
+      };
+      device.name = "Gear trainer";
+      const gatt = {
+        connect: async () => gatt,
+        disconnect: () => {},
+        getPrimaryService: async (uuid: string) => {
+          if (!uuid.includes("1826")) throw new Error("No CPS");
+          return {
+            getCharacteristic: async (uuid: string) => {
+              if (uuid.includes("2ad2")) return telemetry;
+              if (uuid.includes("2ad9")) return control;
+              if (uuid.includes("2ada")) return status;
+              if (uuid.includes("2acc"))
+                return {
+                  readValue: async () =>
+                    new DataView(
+                      Uint8Array.of(0, 0, 0, 0, 4, simulation ? 0x20 : 0, 0, 0)
+                        .buffer,
+                    ),
+                };
+              if (uuid.includes("2ad6"))
+                return {
+                  readValue: async () =>
+                    new DataView(Uint8Array.of(0, 0, 200, 0, 1, 0).buffer),
+                };
+              throw new Error("Unavailable");
+            },
+          };
+        },
+      };
+      device.gatt = gatt;
+      Object.defineProperty(navigator, "bluetooth", {
+        value: { requestDevice: async () => device },
+      });
+      setInterval(
+        () => telemetry.dispatchEvent(new Event("characteristicvaluechanged")),
+        100,
+      );
+      window.addEventListener("test-permission-lost", () => {
+        status.value = new DataView(Uint8Array.of(0xff).buffer);
+        status.dispatchEvent(new Event("characteristicvaluechanged"));
+      });
+    }, simulation);
+    await prepareImportedRide(page, "flat.gpx", flatGearGpx);
+    await page.getByRole("button", { name: "Use reviewed preview" }).click();
+    await page.getByRole("button", { name: "Connect smart trainer" }).click();
+    const consent = page.getByRole("checkbox", {
+      name: "Control trainer resistance",
+    });
+    await expect(consent).not.toBeChecked();
+    if (!simulation) {
+      await consent.check();
+      page.on("dialog", (dialog) => dialog.accept());
+    }
+    await startRide(page);
+    const easier = page.getByRole("button", { name: "Easier gear" });
+    const harder = page.getByRole("button", { name: "Harder gear" });
+    const gear = page.getByRole("group", { name: "Trainer gears" });
+    await expect(gear).toContainText("Gear 11 / 21");
+    if (simulation) {
+      // Starting read-only must allow opting in without leaving the live road.
+      await expect(harder).toBeDisabled();
+      const enable = page.getByRole("button", { name: "Enable trainer gears" });
+      await expect(enable).toBeVisible();
+      page.once("dialog", (dialog) => dialog.dismiss());
+      await enable.click();
+      await expect(harder).toBeDisabled();
+      expect(
+        await page.locator("html").getAttribute("data-control-writes"),
+      ).toBeNull();
+      page.on("dialog", (dialog) => dialog.accept());
+      await enable.click();
+      await expect(enable).toBeHidden();
+    }
+    await expect(harder).toBeEnabled();
+    if (!simulation) await page.setViewportSize({ width: 390, height: 844 });
+    const target = async () =>
+      page.evaluate(
+        (opcode) => {
+          const writes: number[][] = JSON.parse(
+            document.documentElement.dataset.controlWrites || "[]",
+          );
+          const bytes = writes.filter((entry) => entry[0] === opcode).at(-1);
+          if (!bytes) return null;
+          return new DataView(Uint8Array.from(bytes).buffer).getInt16(
+            opcode === 0x11 ? 3 : 1,
+            true,
+          );
+        },
+        simulation ? 0x11 : 0x04,
+      );
+    await expect.poll(target).not.toBeNull();
+    const neutral = (await target())!;
+    await harder.click();
+    await page.keyboard.press("]");
+    await expect(gear).toContainText("Gear 13 / 21");
+    await page.screenshot({
+      path: `test-results/ftms-gears-${simulation ? "simulation" : "resistance"}.png`,
+    });
+    await expect.poll(target).toBeGreaterThan(neutral);
+    await easier.click();
+    await page.keyboard.press("[");
+    await expect(gear).toContainText("Gear 11 / 21");
+    await page.keyboard.down("]");
+    await page.keyboard.down("]");
+    await page.keyboard.up("]");
+    await expect(gear).toContainText("Gear 12 / 21");
+    await page.keyboard.press("[");
+    await page.keyboard.press("p");
+    await expect(harder).toBeDisabled();
+    const pausedWrites = await page
+      .locator("html")
+      .getAttribute("data-control-writes");
+    await page.keyboard.press("]");
+    await expect(gear).toContainText("Gear 11 / 21");
+    await page.waitForTimeout(350);
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-control-writes",
+      pausedWrites!,
+    );
+    await page.getByRole("button", { name: "Resume ride" }).click();
+    await expect(harder).toBeEnabled();
+    await page.evaluate(() =>
+      window.dispatchEvent(new Event("test-permission-lost")),
+    );
+    await expect(harder).toBeDisabled();
+    await expect(easier).toBeDisabled();
+    await expect(page.locator("main").getByRole("alert")).toContainText(
+      "permission",
+    );
+  });
+}

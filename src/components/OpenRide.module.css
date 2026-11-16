@@ -1162,3 +1162,88 @@
     padding: 18px;
   }
 }
+
+.gearControls {
+  position: absolute;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  right: max(24px, env(safe-area-inset-right));
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100vw - 24px);
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: #101719e8;
+  border-radius: 8px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.gearButtons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.gearAvailability {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 260px;
+  white-space: normal;
+  text-align: center;
+  font-size: 11px;
+}
+.gearControls button {
+  min-height: 44px;
+  padding: 8px 12px;
+}
+.gearControls button:disabled {
+  opacity: 0.45;
+}
+
+@media (max-width: 720px) and (orientation: portrait) {
+  .gearControls {
+    bottom: 240px;
+    right: max(12px, env(safe-area-inset-right));
+    flex-direction: column;
+    text-align: center;
+  }
+  .gearButtons {
+    flex-direction: column;
+  }
+  .gearAvailability {
+    max-width: 145px;
+  }
+  .gearControls button {
+    width: 100%;
+  }
+}
+
+.countdown {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  background: #10282570;
+  text-align: center;
+  color: #fff5d8;
+  padding: 24px;
+}
+.countdown > span {
+  letter-spacing: 4px;
+  font-size: 14px;
+}
+.countdown strong {
+  font-size: clamp(80px, 18vw, 180px);
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 6px 30px #0008;
+}
+.countdown p {
+  margin: 0;
+  font-size: 14px;
+}
