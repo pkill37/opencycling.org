@@ -39,6 +39,11 @@ export class RideEngine {
   private peak = 0;
   private gain = 0;
   private accumulator = 0;
+  private presentationTime = 0;
+  // Playback can advance on every animation frame without changing fixed-step physics.
+  get renderElapsedSeconds() {
+    return this.completed ? this.state.elapsedSeconds : this.presentationTime;
+  }
   private speedLimits: number[];
   private trainerControl = false;
   private controlBusy = false;
@@ -79,6 +84,7 @@ export class RideEngine {
     this.completed = distance >= this.course.distanceMeters;
     if (this.completed) this.state.speedMetersPerSecond = 0;
     this.accumulator = 0;
+    this.presentationTime = this.state.elapsedSeconds;
   }
   enableTrainerControl(enabled: boolean) {
     this.trainerControl = enabled;
@@ -176,6 +182,12 @@ export class RideEngine {
       this.step(1 / 60, input.power, input.cadence);
       this.accumulator -= 1 / 60;
     }
+    // Keep the displayed clock steady across pause/resume, which clears the
+    // accumulator. The simulation catches up within one fixed step.
+    this.presentationTime = Math.max(
+      this.presentationTime,
+      this.state.elapsedSeconds + this.accumulator,
+    );
   }
   step(dt: number, power: number, cadence: number) {
     if (this.paused || this.completed) return;

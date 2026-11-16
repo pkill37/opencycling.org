@@ -6,6 +6,18 @@ import type { CyclingRoute } from "../../types";
 import { lookupRoute } from "../route/route";
 import { createLandscape, type Landscape, type SceneryItem } from "./landscape";
 import { createWorldMaterials, type WorldMaterials } from "./materials";
+import { roadStrip, roadPose, roadOffset, roadSamples } from "./road";
+import { createTexturedGeometry } from "./geometry";
+import {
+  buildingSize,
+  fitScenery,
+  terrainFootprints,
+  roadClearance,
+  type FittedItem,
+  type FootprintGround,
+  footprintTouchesWater,
+  footprintInWater,
+} from "./placement";
 
 const TERRAIN_TILE_SIZE = 192;
 const TERRAIN_CELL_SIZE = 4;
@@ -71,7 +83,9 @@ export function addTerrain(
     const cached = clearance.get(key);
     if (cached !== undefined) return cached;
     const road = land.roadAt(x, z, true);
-    const value = road.distance < 15 ? road.y - 0.18 : Infinity;
+    const corridor =
+      land.region === "paris" || land.region === "mediterranean" ? 6.7 : 5.6;
+    const value = road.distance < corridor ? road.y - 0.18 : Infinity;
     clearance.set(key, value);
     return value;
   };
@@ -292,63 +306,91 @@ export function addVerges(
   land: Landscape,
   materials: WorldMaterials,
 ) {
-  const edge =
-    land.region === "paris" || land.region === "mediterranean" ? 6.5 : 5.4;
-  const bands = [
-    {
-      inner: 4.1,
-      outer: edge,
-      material:
-        land.region === "paris" || land.region === "mediterranean"
-          ? materials.stone
-          : materials.gravel,
-    },
-  ];
-  for (const { inner, outer, material } of bands)
-    for (const side of [-1, 1]) {
-      const positions: number[] = [],
-        uvs: number[] = [],
-        indices: number[] = [];
-      route.points.forEach((point, index) => {
-        const p = lookupRoute(point.distanceMeters, route);
-        for (const lateral of [inner, outer]) {
-          const x = p.x + Math.cos(p.heading) * lateral * side;
-          const z = p.z - Math.sin(p.heading) * lateral * side;
-          const neighbour = land.roadAt(x, z);
-          positions.push(
-            x,
-            Math.min(
-              neighbour.nearbyDeck - 0.12,
-              p.y - 0.04 - (lateral - 4.1) * 0.01,
-            ),
-            z,
-          );
-          uvs.push(lateral / 8, point.distanceMeters / 8);
-        }
-        if (index) {
-          const n = index * 2;
-          indices.push(n - 2, n - 1, n, n - 1, n + 1, n);
-        }
-      });
-      const geometry = new T.BufferGeometry();
-      geometry.setAttribute(
-        "position",
-        new T.Float32BufferAttribute(positions, 3),
-      );
-      geometry.setAttribute("uv", new T.Float32BufferAttribute(uvs, 2));
-      geometry.setAttribute(
-        "color",
-        new T.Float32BufferAttribute(
-          new Float32Array(positions.length).fill(1),
-          3,
+  const urban = land.region === "paris" || land.region === "mediterranean";
+  const edge = urban ? 6.5 : 5.4;
+  for (const side of [-1, 1]) {
+    const geometry = roadStrip(
+      route,
+      side * 4.1,
+      side * edge,
+      0,
+      (x, z, p, lateral) =>
+        Math.min(
+          land.roadAt(x, z).nearbyDeck - 0.12,
+          p.y - 0.04 - (Math.abs(lateral) - 4.1) * 0.01,
         ),
-      );
-      geometry.setIndex(side === -1 ? indices : indices.reverse());
-      geometry.computeVertexNormals();
-      const mesh = new T.Mesh(geometry, material);
-      mesh.receiveShadow = true;
-      root.add(mesh);
+    );
+    geometry.setAttribute(
+      "color",
+      new T.Float32BufferAttribute(
+        new Float32Array(geometry.getAttribute("position").count * 3).fill(1),
+        3,
+      ),
+    );
+    const mesh = new T.Mesh(
+      geometry,
+      urban ? materials.stone : materials.gravel,
+    );
+    mesh.receiveShadow = true;
+    root.add(mesh);
+  }
+}
+
+export function addRoadSupports(
+  root: T.Group,
+  route: CyclingRoute,
+  groundAt: (x: number, z: number) => number,
+  materials: WorldMaterials,
+  bounds: FootprintGround,
+) {
+  const samples = roadSamples(route),
+    clearance = roadClearance(route);
+  for (const side of [-1, 1]) {
+    const positions: number[] = [],
+      uvs: number[] = [],
+      indices: number[] = [];
+    for (const p of samples) {
+      const edge = roadOffset(p, side * 4.15);
+      const top = p.y - 0.035,
+        bottom = Math.min(top, groundAt(edge.x, edge.z) - 0.12);
+      positions.push(edge.x, top, edge.z, edge.x, bottom, edge.z);
+      uvs.push(p.distance / 8, top / 8, p.distance / 8, bottom / 8);
     }
+    for (let i = 1; i < samples.length; i++) {
+      const a = roadOffset(samples[i - 1], side * 4.15),
+        b = roadOffset(samples[i], side * 4.15);
+      const length = Math.hypot(b.x - a.x, b.z - a.z);
+      const footprint = {
+        x: (a.x + b.x) / 2,
+        z: (a.z + b.z) / 2,
+        width: 0.06,
+        depth: length + 0.02,
+        rotation: Math.atan2(b.x - a.x, b.z - a.z),
+      };
+      const support = bounds(footprint);
+      const floor =
+        (support.covered
+          ? support.min
+          : Math.min(groundAt(a.x, a.z), groundAt(b.x, b.z))) - 0.15;
+      positions[(i - 1) * 6 + 4] = Math.min(positions[(i - 1) * 6 + 4], floor);
+      positions[i * 6 + 4] = Math.min(positions[i * 6 + 4], floor);
+      // Never build a retaining wall through a neighboring lower switchback.
+      if (clearance.footprint(footprint, 3.5) < 3.45) continue;
+      const n = i * 2;
+      const outwardX = a.x - samples[i - 1].x + b.x - samples[i].x;
+      const outwardZ = a.z - samples[i - 1].z + b.z - samples[i].z;
+      if ((b.z - a.z) * outwardX - (b.x - a.x) * outwardZ > 0)
+        indices.push(n - 2, n, n - 1, n, n + 1, n - 1);
+      else indices.push(n - 2, n - 1, n, n, n - 1, n + 1);
+    }
+    const mesh = new T.Mesh(
+      createTexturedGeometry(positions, uvs, indices),
+      materials.stone,
+    );
+    mesh.name = side === 1 ? "road-retaining-right" : "road-retaining-left";
+    mesh.receiveShadow = true;
+    root.add(mesh);
+  }
 }
 
 function addMountains(
@@ -399,6 +441,7 @@ function instantiate(
   material: T.Material,
   items: SceneryItem[],
   transform: (item: SceneryItem, object: T.Object3D) => void,
+  role = "",
 ) {
   if (!items.length) {
     geometry.dispose();
@@ -414,6 +457,7 @@ function instantiate(
   }
   for (const batch of batches.values()) {
     const mesh = new T.InstancedMesh(geometry, material, batch.length);
+    mesh.name = role;
     const marker = new T.Object3D();
     batch.forEach((item, index) => {
       marker.position.set(item.x, item.y, item.z);
@@ -438,7 +482,7 @@ function instantiate(
   }
 }
 
-function addProps(root: T.Group, land: Landscape, m: WorldMaterials) {
+export function addProps(root: T.Group, land: Landscape, m: WorldMaterials) {
   for (const kind of ["pine", "broadleaf"] as const) {
     const items = land.items.filter((item) => item.kind === kind);
     if (!items.length) continue;
@@ -454,8 +498,9 @@ function addProps(root: T.Group, land: Landscape, m: WorldMaterials) {
       m.trunk,
       items,
       (_, object) => {
-        object.position.y += trunkHeight / 2;
+        object.position.y += (trunkHeight * object.scale.y) / 2;
       },
+      "tree-trunk",
     );
     const foliageParts: [T.BufferGeometry, number, number][] =
       kind === "pine"
@@ -484,7 +529,7 @@ function addProps(root: T.Group, land: Landscape, m: WorldMaterials) {
         kind === "pine" ? m.pineFoliage : m.broadleafFoliage,
         items,
         (_, object) => {
-          object.position.y += kind === "pine" ? 0 : -0.2;
+          object.position.y += kind === "pine" ? 0 : -0.2 * object.scale.y;
           if (land.region === "mediterranean" && kind === "broadleaf")
             object.scale.y *= 0.72;
         },
@@ -497,18 +542,36 @@ function addProps(root: T.Group, land: Landscape, m: WorldMaterials) {
     m.rock,
     land.items.filter((item) => item.kind === "rock"),
     (_, o) => {
-      o.position.y += 0.8;
+      o.position.y += 0.8 * o.scale.y;
       o.scale.multiply(new T.Vector3(1.3, 0.7, 1));
       o.rotation.z = 0.2;
     },
   );
   const buildings = land.items.filter((item) => item.kind === "building");
-  const height =
-    land.region === "paris" ? 20 : land.region === "mediterranean" ? 12 : 8;
-  const width = land.region === "paris" ? 23 : 16;
-  instantiate(root, box(width, height, 14), m.facade, buildings, (_, o) => {
-    o.position.y += (height * o.scale.y) / 2;
-  });
+  const { height, width } = buildingSize(land.region);
+  instantiate(
+    root,
+    box(width, height, 14),
+    m.facade,
+    buildings,
+    (_, o) => {
+      o.position.y += (height * o.scale.y) / 2;
+    },
+    "building",
+  );
+  instantiate(
+    root,
+    box(width, 1, 14),
+    m.stone,
+    buildings,
+    (item, o) => {
+      const bottom = (item as FittedItem).foundationBottom ?? item.y - 0.15;
+      const thickness = item.y - bottom;
+      o.scale.y = thickness;
+      o.position.y = bottom + thickness / 2;
+    },
+    "foundation",
+  );
   const roof = new T.CylinderGeometry(
     land.region === "paris" ? 9 : 0,
     13.5,
@@ -527,7 +590,7 @@ function addProps(root: T.Group, land: Landscape, m: WorldMaterials) {
     m.dark,
     lamps,
     (_, o) => {
-      o.position.y += 2.5;
+      o.position.y += 2.5 * o.scale.y;
     },
   );
   instantiate(
@@ -536,13 +599,22 @@ function addProps(root: T.Group, land: Landscape, m: WorldMaterials) {
     m.stone,
     lamps,
     (_, o) => {
-      o.position.y += 5.1;
+      o.position.y += 5.1 * o.scale.y;
     },
   );
 }
 
-function addLandmarks(root: T.Group, land: Landscape, m: WorldMaterials) {
-  const addBox = (
+export function addLandmarks(
+  root: T.Group,
+  land: Landscape,
+  m: WorldMaterials,
+  bounds: FootprintGround,
+  route: CyclingRoute,
+) {
+  const clearance = roadClearance(route);
+  const shoulder =
+    land.region === "paris" || land.region === "mediterranean" ? 6.5 : 5.4;
+  const boxPart = (
     group: T.Group,
     w: number,
     h: number,
@@ -550,40 +622,38 @@ function addLandmarks(root: T.Group, land: Landscape, m: WorldMaterials) {
     x: number,
     y: number,
     z: number,
-    material = m.stone,
+    material: T.Material = m.stone,
+    grounded = false,
   ) => {
-    const world = new T.Vector3(x, y, z)
-      .applyAxisAngle(new T.Vector3(0, 1, 0), group.rotation.y)
-      .add(group.position);
-    if (land.roadAt(world.x, world.z).distance < 5 + Math.hypot(w, d) / 2)
-      return;
     const mesh = new T.Mesh(box(w, h, d), material);
     mesh.position.set(x, y, z);
+    mesh.userData.grounded = grounded;
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     group.add(mesh);
+    return mesh;
   };
   for (const landmark of land.landmarks) {
     const group = new T.Group();
     group.name = landmark.kind;
-    group.position.set(landmark.x, landmark.y, landmark.z);
     group.rotation.y = landmark.rotation;
     if (landmark.kind === "arc") {
-      // Open centre and curved arch soffit preserve the monument's silhouette.
-      for (const side of [-1, 1]) addBox(group, 11, 33, 22, side * 16, 16.5, 0);
-      addBox(group, 44, 12, 23, 0, 39, 0);
-      addBox(group, 47, 3, 25, 0, 46.5, 0);
+      for (const side of [-1, 1])
+        boxPart(group, 11, 33, 22, side * 16, 16.5, 0, m.stone, true);
+      boxPart(group, 44, 12, 23, 0, 39, 0);
+      boxPart(group, 47, 3, 25, 0, 46.5, 0);
       const arch = new T.Mesh(
         new T.TorusGeometry(10.5, 2.4, 6, 24, Math.PI),
         m.stone,
       );
       arch.position.y = 23;
       group.add(arch);
+      // Relief panels are attached to the pillars, not independent ground props.
       for (const side of [-1, 1])
         for (const z of [-11.2, 11.2])
-          addBox(group, 6, 14, 0.8, side * 16, 16, z);
+          boxPart(group, 6, 14, 0.8, side * 16, 16, z);
     } else if (landmark.kind === "obelisk") {
-      addBox(group, 5, 4, 5, 0, 2, 0);
+      boxPart(group, 5, 4, 5, 0, 2, 0, m.stone, true);
       const shaft = new T.Mesh(new T.CylinderGeometry(1, 1.8, 22, 4), m.stone);
       shaft.position.y = 15;
       group.add(shaft);
@@ -591,18 +661,19 @@ function addLandmarks(root: T.Group, land: Landscape, m: WorldMaterials) {
       tip.position.y = 27.5;
       group.add(tip);
     } else {
-      // Small fishing port cue, kept below/beside the unchanged flat GPX road.
-      addBox(group, 65, 1.5, 12, 0, -1.2, 22);
+      // Houses are grounded independently; boats are explicitly water-supported.
       for (let i = 0; i < 7; i++) {
-        addBox(
+        const h = 5 + (i % 3);
+        boxPart(
           group,
           7,
-          5 + (i % 3),
+          h,
           7,
           -24 + i * 8,
-          0,
+          h / 2,
           24 + Math.sin(i) * 4,
           m.facade,
+          true,
         );
       }
       for (let i = 0; i < 5; i++) {
@@ -611,80 +682,231 @@ function addLandmarks(root: T.Group, land: Landscape, m: WorldMaterials) {
           i % 2 ? m.stone : m.roof,
         );
         boat.rotation.set(Math.PI / 2, 0, Math.PI / 4);
-        boat.position.set(-20 + i * 9, -2, -20);
+        boat.position.set(-20 + i * 9, -2.5, -20);
+        boat.userData.waterSupported = true;
         group.add(boat);
       }
-      // Three small arches, positioned seaward rather than spanning the GPX.
-      for (let i = -1; i <= 1; i++) {
-        const arch = new T.Mesh(
-          new T.TorusGeometry(5, 0.8, 5, 16, Math.PI),
+    }
+    const originalParts = [...group.children] as T.Mesh[];
+    let accepted = false;
+    for (let attempt = 0; attempt < 49 && !accepted; attempt++) {
+      const radius = attempt === 0 ? 0 : Math.ceil(attempt / 8) * 8,
+        angle = (((attempt - 1) % 8) * Math.PI) / 4;
+      group.position.set(
+        landmark.x + Math.cos(angle) * radius,
+        0,
+        landmark.z + Math.sin(angle) * radius,
+      );
+      const parts = originalParts.map((mesh) => {
+        mesh.geometry.computeBoundingBox();
+        const local = mesh.geometry
+          .boundingBox!.clone()
+          .applyMatrix4(
+            new T.Matrix4().compose(mesh.position, mesh.quaternion, mesh.scale),
+          );
+        const center = local
+          .getCenter(new T.Vector3())
+          .applyAxisAngle(new T.Vector3(0, 1, 0), group.rotation.y)
+          .add(group.position);
+        const size = local.getSize(new T.Vector3());
+        return {
+          mesh,
+          local,
+          footprint: {
+            x: center.x,
+            z: center.z,
+            width: size.x,
+            depth: size.z,
+            rotation: group.rotation.y,
+          },
+        };
+      });
+      const contacts = parts.filter((p) => p.mesh.userData.grounded);
+      const sites = contacts.map((p) => bounds(p.footprint));
+      if (landmark.kind !== "harbour") {
+        if (sites.some((site) => !site.covered)) continue;
+        const low = Math.min(...sites.map((site) => site.min)),
+          high = Math.max(...sites.map((site) => site.max));
+        if (high - low > 1.98) continue;
+        group.position.y = high + 0.02;
+      }
+      let invalid = false;
+      for (const part of parts) {
+        const { footprint, mesh, local } = part;
+        if (mesh.userData.waterSupported) continue;
+        const deck = land.roadAt(footprint.x, footprint.z).y;
+        const overhead = group.position.y + local.min.y >= deck + 4.5;
+        if (
+          !overhead &&
+          clearance.footprint(footprint, shoulder + 1) < shoulder + 0.05
+        )
+          invalid = true;
+        if (mesh.userData.grounded && footprintTouchesWater(footprint, land))
+          invalid = true;
+      }
+      if (invalid && landmark.kind !== "harbour") continue;
+      for (const part of parts) {
+        const { mesh, footprint, local } = part;
+        if (mesh.userData.waterSupported) {
+          // A boat must float in the sea, including its full hull footprint.
+          const wet = footprintInWater(footprint, land);
+          if (!wet || clearance.footprint(footprint, 7) < 7) {
+            group.remove(mesh);
+            mesh.geometry.dispose();
+          }
+          continue;
+        }
+        if (!mesh.userData.grounded) continue;
+        const site = bounds(footprint);
+        if (
+          !site.covered ||
+          site.max - site.min > 1.98 ||
+          footprintTouchesWater(footprint, land) ||
+          clearance.footprint(footprint, shoulder + 1) < shoulder + 0.05
+        ) {
+          if (landmark.kind === "harbour") {
+            group.remove(mesh);
+            mesh.geometry.dispose();
+            continue;
+          }
+        }
+        const top =
+          landmark.kind === "harbour" ? site.max + 0.02 : group.position.y;
+        if (landmark.kind === "harbour") mesh.position.y += top - local.min.y;
+        const bottom = site.min - 0.15;
+        const foundation = new T.Mesh(
+          box(footprint.width, top - bottom, footprint.depth),
           m.stone,
         );
-        arch.position.set(i * 11, -1.5, -4);
-        group.add(arch);
+        foundation.position.copy(mesh.position);
+        foundation.position.y = (top + bottom) / 2 - group.position.y;
+        foundation.receiveShadow = true;
+        foundation.name = "landmark-foundation";
+        group.add(foundation);
       }
+      accepted = true;
     }
-    root.add(group);
+    if (accepted) root.add(group);
+    else for (const mesh of originalParts) mesh.geometry.dispose();
   }
 }
 
-function addRoadside(
+export function addRoadside(
   root: T.Group,
   route: CyclingRoute,
   land: Landscape,
   m: WorldMaterials,
+  groundAt: (x: number, z: number) => number,
 ) {
-  const posts: SceneryItem[] = [];
-  const rails: SceneryItem[] = [];
-  const step = Math.max(9, route.distanceMeters / 2400);
-  for (let d = 0; d < route.distanceMeters; d += step) {
-    const p = lookupRoute(d, route);
-    for (const side of [-1, 1]) {
-      const lateral = side * 4.8;
-      const x = p.x + Math.cos(p.heading) * lateral,
-        z = p.z - Math.sin(p.heading) * lateral;
-      if (land.roadAt(x, z).distance < 4.3) continue;
-      const coast = land.region === "mediterranean" && land.isWater(x - 55, z);
+  const posts: SceneryItem[] = [],
+    rails: SceneryItem[] = [];
+  const clearance = roadClearance(route);
+  // Follow successive support points, rather than long tangent beams through bends.
+  const step = 3;
+  for (const side of [-1, 1]) {
+    let previous: SceneryItem | undefined;
+    for (let d = 0; d <= route.distanceMeters; d += step) {
+      const p = roadPose(d, route),
+        offset = roadOffset(p, side * 4.8);
+      const coast =
+        land.region === "mediterranean" &&
+        land.isWater(offset.x - 55, offset.z);
       const alpine =
         land.region === "alpine" && Math.abs(p.gradient) > 0.035 && side === -1;
-      if (!coast && !alpine) continue;
-      posts.push({ x, z, y: p.y, kind: "rock", scale: 1, rotation: p.heading });
-      // Keep rails short enough to avoid bridging sharp corners.
-      if (p.curvature < 0.035)
-        rails.push({
-          x,
-          z,
-          y: p.y,
-          kind: "rock",
+      const y = groundAt(offset.x, offset.z);
+      if (
+        (!coast && !alpine) ||
+        !Number.isFinite(y) ||
+        Math.abs(y - p.y) > 1.5 ||
+        clearance(offset.x, offset.z, 6) < 4.5
+      ) {
+        previous = undefined;
+        continue;
+      }
+      const post: SceneryItem = {
+        ...offset,
+        y: y - 0.04,
+        kind: "rock",
+        scale: p.y + 1 - (y - 0.04),
+        rotation: p.heading,
+      };
+      posts.push(post);
+      if (previous) {
+        const dx = post.x - previous.x,
+          dz = post.z - previous.z,
+          dy = post.y + post.scale - previous.y - previous.scale;
+        const length = Math.hypot(dx, dz);
+        const beam = {
+          ...post,
+          x: (post.x + previous.x) / 2,
+          z: (post.z + previous.z) / 2,
+          y: (post.y + post.scale + previous.y + previous.scale) / 2 - 0.15,
+          rotation: Math.atan2(dx, dz),
+          pitch: -Math.atan2(dy, length),
           scale: 1,
-          rotation: p.heading,
-          // A beam runs along local +Z. Negative X rotation raises its far end
-          // with the route, matching the road and rider pitch convention.
-          pitch: -Math.atan(p.gradient),
-        });
+        };
+        const box = { ...beam, width: 0.2, depth: length + 0.1 };
+        if (
+          length > 0.1 &&
+          length < step * 1.6 &&
+          clearance.footprint(box, 5) > 4.4
+        ) {
+          // Per-instance Z scale encodes the actual length between the two posts.
+          rails.push({ ...beam, scale: Math.hypot(length, dy) + 0.1 });
+        }
+      }
+      previous = post;
     }
   }
   instantiate(
     root,
-    new T.BoxGeometry(0.22, 1.05, 0.22),
+    new T.BoxGeometry(0.22, 1, 0.22),
     m.stone,
     posts,
-    (_, o) => {
-      o.position.y += 0.5;
+    (item, o) => {
+      o.scale.set(1, item.scale, 1);
+      o.position.y += item.scale / 2;
     },
+    "guard-post",
   );
   instantiate(
     root,
-    // Rails are centered on the same samples as the posts. Make each beam
-    // slightly longer than the sample interval so neighboring sections overlap
-    // instead of leaving a gap on long climbs.
-    new T.BoxGeometry(0.18, 0.28, step + 0.45),
+    new T.BoxGeometry(0.18, 0.28, 1),
     m.stone,
     rails,
-    (_, o) => {
-      o.position.y += 0.9;
+    (item, o) => {
+      o.scale.set(1, 1, item.scale);
     },
+    "guard-rail",
   );
+}
+
+export function buildScenery(
+  root: T.Group,
+  route: CyclingRoute,
+  land: Landscape,
+  materials: WorldMaterials,
+  prepared?: TerrainTileData[],
+) {
+  const tiles = addTerrain(root, route, land, materials, prepared);
+  const groundAt = terrainSampler(tiles, land.heightAt);
+  const footprintGround = terrainFootprints(tiles);
+  const fitted = fitScenery(land, route, groundAt, footprintGround);
+  land.items = fitted.items;
+  for (const landmark of land.landmarks) {
+    landmark.y =
+      landmark.kind === "harbour"
+        ? land.roadAt(landmark.x, landmark.z).y
+        : groundAt(landmark.x, landmark.z);
+  }
+  addVerges(root, route, land, materials);
+  addRoadSupports(root, route, groundAt, materials, footprintGround);
+  addWater(root, land, materials);
+  if (land.region === "alpine") addMountains(root, route, materials.rock);
+  addProps(root, land, materials);
+  addLandmarks(root, land, materials, footprintGround, route);
+  addRoadside(root, route, land, materials, groundAt);
+  return { tiles, groundAt, footprintGround, report: fitted.report };
 }
 
 export function createScenery(
@@ -699,7 +921,13 @@ export function createScenery(
   const root = new T.Group();
   root.name = `scenery-${land.region}`;
   scene.add(root);
-  const tiles = addTerrain(root, route, land, materials, prepared);
+  const { tiles, groundAt } = buildScenery(
+    root,
+    route,
+    land,
+    materials,
+    prepared,
+  );
   const nearTerrain =
     land.region === "paris"
       ? [materials.grass, materials.stone]
@@ -708,28 +936,13 @@ export function createScenery(
     land.region === "paris"
       ? [materials.grassFar, materials.stone]
       : materials.grassFar;
-  const groundAt = terrainSampler(tiles, land.heightAt);
-  for (const item of land.items) item.y = groundAt(item.x, item.z);
-  for (const landmark of land.landmarks) {
-    landmark.y =
-      landmark.kind === "harbour"
-        ? land.roadAt(landmark.x, landmark.z).y
-        : groundAt(landmark.x, landmark.z);
-  }
-  addVerges(root, route, land, materials);
-  addWater(root, land, materials);
-  if (land.region === "alpine") addMountains(root, route, materials.rock);
-  addProps(root, land, materials);
-  addLandmarks(root, land, materials);
-  addRoadside(root, route, land, materials);
-  const sky =
-    land.region === "mediterranean"
-      ? 0xb9dbe8
-      : land.region === "paris"
-        ? 0xc9d7de
-        : 0xbfd7e5;
+  const sky = 0xe6cbb0;
+  const alpine = land.region === "alpine";
+  const terrainViewDistance = alpine ? 5000 : 2200;
+  const sceneryViewDistance = alpine ? 3000 : 1800;
+  const terrainSet = new Set<T.Object3D>(tiles);
   scene.background = new T.Color(sky);
-  scene.fog = new T.Fog(sky, 450, land.region === "alpine" ? 6500 : 1800);
+  scene.fog = new T.Fog(sky, alpine ? 1800 : 700, alpine ? 10000 : 3500);
   const culled = root.children.filter(
     (child) => typeof child.userData.centerX === "number",
   );
@@ -747,7 +960,13 @@ export function createScenery(
       for (const child of culled) {
         const dx = child.userData.centerX - x,
           dz = child.userData.centerZ - z;
-        child.visible = dx * dx + dz * dz < 1050 * 1050;
+        const viewDistance = terrainSet.has(child)
+          ? terrainViewDistance
+          : sceneryViewDistance;
+        // Include the batch radius so the edges of visible hills and villages
+        // remain present when their centers cross the distance boundary.
+        const distance = viewDistance + TERRAIN_TILE_SIZE;
+        child.visible = dx * dx + dz * dz < distance * distance;
       }
       for (const tile of tiles) {
         const dx = tile.userData.centerX - x,

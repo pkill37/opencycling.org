@@ -339,7 +339,11 @@ export function createLandscape(
             : 1.2;
     const detail = terrainDetail(x, z);
     const ripple = terrainRelief(x, z) * relief;
-    const blend = Math.min(1, Math.max(0, (road.distance - 6) / 100));
+    // Keep the whole road/shoulder corridor level with its deck. A terrain cell
+    // is four metres wide: beginning the measured-terrain blend at six metres
+    // let an outer vertex pull a triangle far below the road edge on steep DEMs.
+    const corridor = 12;
+    const blend = Math.min(1, Math.max(0, (road.distance - corridor) / 100));
     let sum = 0,
       weights = 0;
     for (const anchor of anchors) {
@@ -348,7 +352,7 @@ export function createLandscape(
       weights += weight;
     }
     const farHeight = weights ? sum / weights : start.y;
-    const local = Math.max(0, 1 - road.distance / 250);
+    const local = Math.max(0, 1 - Math.max(0, road.distance - corridor) / 250);
     const base = farHeight * (1 - local) + road.blendedY * local;
     const slopeRelief =
       region === "alpine" ? Math.abs(detail) * 1.8 : Math.abs(detail) * 0.35;
@@ -363,7 +367,10 @@ export function createLandscape(
       ripple * blend +
       slopeRelief * Math.sign(detail) * blend +
       microRelief * blend;
-    const transition = Math.min(1, Math.max(0, (road.distance - 6) / 34));
+    const transition = Math.min(
+      1,
+      Math.max(0, (road.distance - corridor) / (40 - corridor)),
+    );
     const smooth = transition * transition * (3 - 2 * transition);
     const y =
       measured === undefined

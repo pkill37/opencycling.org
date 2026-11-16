@@ -8,7 +8,7 @@ export const bundledRoutes = [
     title: "Alpe d’Huez",
     kicker: "THE CLIMB",
     description: "Find your rhythm. Take on the ascent.",
-    color: "#d9f77e",
+    color: "#f4cf83",
     distance: "15.77",
     gain: "1137",
     note: "GPX preview · unverified",

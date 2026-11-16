@@ -291,7 +291,7 @@ function LoadedOpenRide({
   }, [activeEngine, setPhase]);
   const ghostPlayback = useCallback((): GhostPlayback | undefined => {
     const run = ghostRunRef.current;
-    const elapsedSeconds = activeEngine.state.elapsedSeconds;
+    const elapsedSeconds = activeEngine.renderElapsedSeconds;
     if (modeRef.current !== "ghost" || !run) return undefined;
     const sample = ghostAtTime(run, elapsedSeconds);
     return {

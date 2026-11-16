@@ -78,12 +78,20 @@ test("completed ride retains its live world under the green summary overlay", as
 test("simulator ride, controls, pause, summary and restart", async ({
   page,
 }) => {
+  test.setTimeout(60000);
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
+  page.on("console", (message) => {
+    if (
+      message.type() === "error" &&
+      /THREE|WebGL|shader/i.test(message.text())
+    )
+      errors.push(message.text());
+  });
   await page.goto("/");
   await expect(
     page.getByRole("heading", {
-      name: "Free virtual cycling in your browser.",
+      name: "Free indoor bike training in your browser.",
     }),
   ).toBeVisible();
   await expect(page.locator("canvas")).toHaveCount(0);
@@ -103,7 +111,7 @@ test("simulator ride, controls, pause, summary and restart", async ({
   ).toHaveAttribute("aria-pressed", "true");
   await startRide(page);
   await expect(
-    page.getByText("VIRTUAL TRAINER", { exact: true }),
+    page.getByRole("button", { name: "Increase power" }),
   ).toBeVisible();
   await page.locator("main").click({ position: { x: 400, y: 300 } });
   await page.keyboard.press("5");
@@ -128,10 +136,62 @@ test("simulator ride, controls, pause, summary and restart", async ({
   await expect(page.getByText("AVERAGE POWER", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Ride again" }).click();
   await expect(
-    page.getByText("VIRTUAL TRAINER", { exact: true }),
+    page.getByRole("button", { name: "Increase power" }),
   ).toBeVisible();
   expect(errors).toEqual([]);
 });
+test("saved ghost replay renders and survives pause and resume", async ({
+  page,
+}) => {
+  test.setTimeout(60000);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    if (
+      message.type() === "error" &&
+      /THREE|WebGL|shader/i.test(message.text())
+    )
+      errors.push(message.text());
+  });
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "opencycling:ghost:alpe-d-huez-test",
+      JSON.stringify({
+        routeId: "alpe-d-huez-test",
+        elapsedSeconds: 60,
+        samples: [
+          [0, 0],
+          [1, 3],
+          [4, 16],
+          [60, 240],
+        ].map(([elapsedSeconds, distanceMeters]) => ({
+          elapsedSeconds,
+          distanceMeters,
+          speedMetersPerSecond: 4,
+          cadenceRpm: 80,
+        })),
+      }),
+    );
+  });
+  await page.goto("/ride/");
+  await page.getByRole("button", { name: "Ghost Mode" }).click();
+  await startRide(page);
+  const gap = page.getByText(/^GHOST ·/);
+  await expect(gap).toBeVisible();
+  await page.screenshot({ path: "test-results/ghost-replay.png" });
+  await page.keyboard.press("p");
+  await expect(
+    page.getByRole("heading", { name: "Ride paused" }),
+  ).toBeVisible();
+  const pausedGap = await gap.textContent();
+  await page.locator("canvas").screenshot();
+  await expect(gap).toHaveText(pausedGap!);
+  await page.getByRole("button", { name: "Resume ride" }).click();
+  await expect(page.getByRole("heading", { name: "Ride paused" })).toBeHidden();
+  await expect(gap).not.toHaveText(pausedGap!);
+  expect(errors).toEqual([]);
+});
+
 test("phone simulator touch controls remain usable", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/ride/");

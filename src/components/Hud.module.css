@@ -1,5 +1,9 @@
 .panel {
-  background: rgb(var(--hud-background, 21 43 39) / 88%);
-  border: 1px solid var(--hud-border, #ffffff25);
-  border-radius: var(--hud-radius, 4px);
+  background: rgb(var(--hud-background, 24 43 40) / 90%);
+  border: 1px solid var(--hud-border, #f5dab63b);
+  border-radius: var(--hud-radius, 12px);
+  box-shadow:
+    0 8px 30px #132b2926,
+    inset 0 1px 0 #fff2;
+  backdrop-filter: blur(12px);
 }

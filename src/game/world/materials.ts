@@ -46,7 +46,7 @@ export function createWorldMaterials(
     texture.anisotropy = Math.min(2, renderer.capabilities.getMaxAnisotropy());
     textures.add(texture);
   };
-  const road = standard({ color: 0xb0b0aa, roughness: 0.96 });
+  const road = standard({ color: 0xa3aaa2, roughness: 0.88 });
   const gravel = standard({
     color: region === "mediterranean" ? 0xd8c6a5 : 0xb2aa94,
     roughness: 1,
@@ -229,8 +229,8 @@ ${shader.fragmentShader}`.replace(
   };
   grassFar.customProgramCacheKey = () => "terrain-distant-v1";
   const water = standard({
-    color: region === "paris" ? 0x476d68 : 0x228d9e,
-    roughness: 0.28,
+    color: region === "paris" ? 0x537f78 : 0x3e9caa,
+    roughness: 0.2,
     metalness: 0.25,
   });
   // Moving analytic wave normals: no reflection pass, external shaders, or time in physics.

@@ -84,6 +84,57 @@ export function saveGhostIfFaster(
   }
 }
 
+function distanceCurve(
+  samples: GhostSample[],
+  low: number,
+  high: number,
+  amount: number,
+) {
+  const start = samples[low];
+  const end = samples[high];
+  const duration = end.elapsedSeconds - start.elapsedSeconds;
+  const distance = end.distanceMeters - start.distanceMeters;
+  if (duration <= 0 || distance <= 0)
+    return { distanceMeters: start.distanceMeters, speedMetersPerSecond: 0 };
+  const slope = distance / duration;
+  // Shape-preserving cubic tangents keep velocity continuous at recordings,
+  // without overshooting a sample or moving backwards during a recorded stop.
+  const tangent = (index: number) => {
+    if (index === 0 || index === samples.length - 1) return slope;
+    const previous = samples[index - 1];
+    const current = samples[index];
+    const next = samples[index + 1];
+    const before = current.elapsedSeconds - previous.elapsedSeconds;
+    const after = next.elapsedSeconds - current.elapsedSeconds;
+    if (before <= 0 || after <= 0) return slope;
+    const left = (current.distanceMeters - previous.distanceMeters) / before;
+    const right = (next.distanceMeters - current.distanceMeters) / after;
+    if (left <= 0 || right <= 0) return 0;
+    const w1 = 2 * after + before;
+    const w2 = after + 2 * before;
+    return (w1 + w2) / (w1 / left + w2 / right);
+  };
+  const m0 = tangent(low) * duration;
+  const m1 = tangent(high) * duration;
+  const t = amount,
+    t2 = t * t,
+    t3 = t2 * t;
+  return {
+    distanceMeters:
+      start.distanceMeters +
+      (-2 * t3 + 3 * t2) * distance +
+      (t3 - 2 * t2 + t) * m0 +
+      (t3 - t2) * m1,
+    speedMetersPerSecond: Math.max(
+      0,
+      ((-6 * t2 + 6 * t) * distance +
+        (3 * t2 - 4 * t + 1) * m0 +
+        (3 * t2 - 2 * t) * m1) /
+        duration,
+    ),
+  };
+}
+
 function interpolate(
   samples: GhostSample[],
   value: number,
@@ -102,15 +153,24 @@ function interpolate(
   const low = samples[lowIndex];
   const next = samples[high];
   const span = next[key] - low[key];
-  const amount = span > 0 ? (value - low[key]) / span : 0;
+  let amount = span > 0 ? (value - low[key]) / span : 0;
+  if (key === "distanceMeters" && span > 0) {
+    // Invert the same curve for the HUD gap so it agrees with the visible ghost.
+    let from = 0;
+    let to = 1;
+    for (let i = 0; i < 28; i++) {
+      amount = (from + to) / 2;
+      if (distanceCurve(samples, lowIndex, high, amount).distanceMeters < value)
+        from = amount;
+      else to = amount;
+    }
+    amount = (from + to) / 2;
+  }
+  const trajectory = distanceCurve(samples, lowIndex, high, amount);
   return {
     elapsedSeconds:
       low.elapsedSeconds + (next.elapsedSeconds - low.elapsedSeconds) * amount,
-    distanceMeters:
-      low.distanceMeters + (next.distanceMeters - low.distanceMeters) * amount,
-    speedMetersPerSecond:
-      low.speedMetersPerSecond +
-      (next.speedMetersPerSecond - low.speedMetersPerSecond) * amount,
+    ...trajectory,
     cadenceRpm: low.cadenceRpm + (next.cadenceRpm - low.cadenceRpm) * amount,
   };
 }

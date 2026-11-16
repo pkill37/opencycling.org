@@ -5,9 +5,10 @@ import { lookupRoute } from "../route/route";
 import type { CyclingRoute } from "../../types";
 import type { RideEngine } from "../loop/engine";
 import type { ZombiesSnapshot } from "../modes/zombies";
+import { createAtmosphere, SUN_DIRECTION } from "./atmosphere";
 import { createRider } from "./rider";
 import { createScenery } from "./scenery";
-import { createTexturedGeometry } from "./geometry";
+import { roadStrip, roadPose } from "./road";
 import type { GhostPlayback } from "../../lib/ghost";
 
 function ribbon(
@@ -18,42 +19,12 @@ function ribbon(
   color: number,
   material?: T.MeshStandardMaterial,
 ) {
-  const positions: number[] = [],
-    indices: number[] = [],
-    uvs: number[] = [];
-  // Keep the rendered ribbon dense enough that tight GPS corners do not read as
-  // polygonal. This only affects the world mesh; route lookup and physics keep
-  // their original sampling and measurements.
-  const spacing = Math.max(1.5, Math.min(4, route.distanceMeters / 3500));
-  const samples: ReturnType<typeof lookupRoute>[] = [];
-  for (let distance = 0; distance < route.distanceMeters; distance += spacing)
-    samples.push(lookupRoute(distance, route));
-  samples.push(lookupRoute(route.distanceMeters, route));
-  samples.forEach((p, i) => {
-    const previous = samples[Math.max(0, i - 1)];
-    const next = samples[Math.min(samples.length - 1, i + 1)];
-    const heading =
-      previous === next
-        ? p.heading
-        : Math.atan2(next.x - previous.x, next.z - previous.z);
-    for (const side of [-1, 1]) {
-      const lateral = offset + (side * width) / 2;
-      positions.push(
-        p.x + Math.cos(heading) * lateral,
-        p.y + lift,
-        p.z - Math.sin(heading) * lateral,
-      );
-      uvs.push(
-        ((side + 1) * width) / 8,
-        (p.progress * route.distanceMeters) / 8,
-      );
-    }
-    if (i) {
-      const n = i * 2;
-      indices.push(n - 2, n, n - 1, n - 1, n, n + 1);
-    }
-  });
-  const geometry = createTexturedGeometry(positions, uvs, indices);
+  const geometry = roadStrip(
+    route,
+    offset - width / 2,
+    offset + width / 2,
+    lift,
+  );
   const mesh = new T.Mesh(
     geometry,
     material ??
@@ -94,7 +65,31 @@ function createContactShadow() {
   return shadow;
 }
 
-function addStartGate(scene: T.Scene, route: CyclingRoute) {
+function gatePost(
+  group: T.Group,
+  x: number,
+  z: number,
+  material: T.Material,
+  groundAt: (x: number, z: number) => number,
+) {
+  const world = new T.Vector3(x, 0, z)
+    .applyAxisAngle(new T.Vector3(0, 1, 0), group.rotation.y)
+    .add(group.position);
+  const bottom = groundAt(world.x, world.z) - group.position.y - 0.05;
+  const post = new T.Mesh(
+    new T.BoxGeometry(0.5, Math.max(0.2, 8 - bottom), 0.5),
+    material,
+  );
+  post.position.set(x, (8 + bottom) / 2, z);
+  post.castShadow = true;
+  group.add(post);
+}
+
+function addStartGate(
+  scene: T.Scene,
+  route: CyclingRoute,
+  groundAt: (x: number, z: number) => number,
+) {
   const start = lookupRoute(0, route),
     gate = new T.Group();
   gate.position.set(start.x, start.y, start.z);
@@ -108,10 +103,7 @@ function addStartGate(scene: T.Scene, route: CyclingRoute) {
   const bannerMaterial = new T.MeshStandardMaterial({ color: 0x263f5d });
   for (const z of [-3, 0, 3]) {
     for (const x of [-7, 7]) {
-      const post = new T.Mesh(new T.BoxGeometry(0.5, 8, 0.5), postMaterial);
-      post.position.set(x, 4, z);
-      post.castShadow = true;
-      gate.add(post);
+      gatePost(gate, x, z, postMaterial, groundAt);
     }
     const beam = new T.Mesh(
       new T.BoxGeometry(14.5, 0.65, 0.55),
@@ -147,7 +139,11 @@ function addStartGate(scene: T.Scene, route: CyclingRoute) {
   scene.add(gate);
 }
 
-function addFinishTunnel(scene: T.Scene, route: CyclingRoute) {
+function addFinishTunnel(
+  scene: T.Scene,
+  route: CyclingRoute,
+  groundAt: (x: number, z: number) => number,
+) {
   const finish = lookupRoute(route.distanceMeters, route);
   const tunnel = new T.Group();
   tunnel.position.set(finish.x, finish.y, finish.z);
@@ -161,10 +157,7 @@ function addFinishTunnel(scene: T.Scene, route: CyclingRoute) {
   const banner = new T.MeshStandardMaterial({ color: 0x263f5d });
   for (const z of [-3, 0, 3]) {
     for (const x of [-7, 7]) {
-      const post = new T.Mesh(new T.BoxGeometry(0.5, 8, 0.5), frame);
-      post.position.set(x, 4, z);
-      post.castShadow = true;
-      tunnel.add(post);
+      gatePost(tunnel, x, z, frame, groundAt);
     }
     const beam = new T.Mesh(new T.BoxGeometry(14.5, 0.65, 0.55), accent);
     beam.position.set(0, 8, z);
@@ -364,7 +357,7 @@ export function createWorld(
   renderer.setSize(host.clientWidth, host.clientHeight);
   renderer.outputColorSpace = T.SRGBColorSpace;
   renderer.toneMapping = T.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.1;
+  renderer.toneMappingExposure = 1.08;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = T.PCFShadowMap;
   host.appendChild(renderer.domElement);
@@ -372,13 +365,13 @@ export function createWorld(
     52,
     host.clientWidth / host.clientHeight,
     0.1,
-    4000,
+    6000,
   );
-  scene.add(new T.HemisphereLight(0xd9edff, 0x77765b, 1.8));
-  const fill = new T.DirectionalLight(0xb9d9ff, 0.42);
+  scene.add(new T.HemisphereLight(0xd2e8e5, 0x8d7959, 1.65));
+  const fill = new T.DirectionalLight(0xb9d9e2, 0.48);
   fill.position.set(-120, 90, -160);
   scene.add(fill);
-  const sun = new T.DirectionalLight(0xfff0d7, 2.3);
+  const sun = new T.DirectionalLight(0xffdfab, 2.6);
   sun.castShadow = true;
   sun.shadow.mapSize.set(
     lowPowerDevice ? 256 : 512,
@@ -401,9 +394,10 @@ export function createWorld(
   scene.add(sun, sun.target);
   const scenery = createScenery(scene, route, renderer, elevation, prepared);
   if (scenery.region === "alpine") {
-    camera.far = 8000;
+    camera.far = 14000;
     camera.updateProjectionMatrix();
   }
+  const atmosphere = createAtmosphere(scene);
   renderer.domElement.dataset.scenery = scenery.region;
   renderer.domElement.dataset.terrainGeneration = prepared
     ? "worker"
@@ -414,22 +408,14 @@ export function createWorld(
     ribbon(route, 0.11, -3.1, 0.035, 0xe4e4c8),
     ribbon(route, 0.11, 3.1, 0.035, 0xe4e4c8),
   );
-  const marks = new T.InstancedMesh(
-    new T.BoxGeometry(0.1, 0.025, 2.7),
+  const marks = new T.Mesh(
+    roadStrip(route, -0.05, 0.05, 0.04, undefined, true),
     new T.MeshStandardMaterial({ color: 0xe1dbc1 }),
-    Math.floor(route.distanceMeters / 9),
   );
-  const marker = new T.Object3D();
-  for (let i = 0; i < marks.count; i++) {
-    const p = lookupRoute(i * 9, route);
-    marker.position.set(p.x, p.y + 0.04, p.z);
-    marker.rotation.set(-Math.atan(p.gradient), p.heading, 0, "YXZ");
-    marker.updateMatrix();
-    marks.setMatrixAt(i, marker.matrix);
-  }
+  marks.receiveShadow = true;
   scene.add(marks);
-  addStartGate(scene, route);
-  const finishScene = addFinishTunnel(scene, route);
+  addStartGate(scene, route, scenery.groundAt);
+  const finishScene = addFinishTunnel(scene, route, scenery.groundAt);
   const rider = createRider();
   const ghostRider = createRider();
   ghostRider.group.traverse((object) => {
@@ -479,6 +465,8 @@ export function createWorld(
   const cameraOffset = new T.Vector3();
   const desiredCameraPosition = new T.Vector3();
   const lookTarget = new T.Vector3();
+  const ghostRotation = new T.Euler(0, 0, 0, "YXZ");
+  const ghostOrientation = new T.Quaternion();
   canvas.style.cursor = "grab";
   canvas.style.touchAction = "none";
   const clamp = (value: number, min: number, max: number) =>
@@ -569,7 +557,7 @@ export function createWorld(
         }
       }
       const state = engine.state,
-        point = lookupRoute(state.distanceMeters, route);
+        point = roadPose(state.distanceMeters, route);
       if (engine.completed && !finishCelebrationTriggered) {
         finishCelebrationTriggered = true;
         finishScene.celebrate();
@@ -580,7 +568,7 @@ export function createWorld(
         cameraMode = 0;
         resetOrbit();
       }
-      rider.group.position.set(point.x, point.y + 0.07, point.z);
+      rider.group.position.set(point.x, point.y + 0.035, point.z);
       rider.group.rotation.set(
         -Math.atan(point.gradient),
         point.heading,
@@ -589,7 +577,7 @@ export function createWorld(
       );
       rider.group.visible = cameraMode === 0;
       if (riderShadow) {
-        riderShadow.position.set(point.x, point.y + 0.012, point.z);
+        riderShadow.position.set(point.x, point.y + 0.028, point.z);
         riderShadow.rotation.y = point.heading;
         riderShadow.visible = cameraMode === 0;
       }
@@ -602,19 +590,26 @@ export function createWorld(
       );
       const ghost = getGhost?.();
       if (ghost?.visible) {
-        const ghostPoint = lookupRoute(ghost.distanceMeters, route);
+        const ghostPoint = roadPose(ghost.distanceMeters, route);
         const ghostLateralOffset = 2.2;
         ghostRider.group.position.set(
           ghostPoint.x + Math.cos(ghostPoint.heading) * ghostLateralOffset,
-          ghostPoint.y + 0.09,
+          ghostPoint.y + 0.035,
           ghostPoint.z - Math.sin(ghostPoint.heading) * ghostLateralOffset,
         );
-        ghostRider.group.rotation.set(
+        ghostRotation.set(
           -Math.atan(ghostPoint.gradient),
           ghostPoint.heading,
           0,
-          "YXZ",
         );
+        ghostOrientation.setFromEuler(ghostRotation);
+        if (!ghostRider.group.visible)
+          ghostRider.group.quaternion.copy(ghostOrientation);
+        else if (moving)
+          ghostRider.group.quaternion.slerp(
+            ghostOrientation,
+            1 - Math.exp(-Math.max(0, dt) * 18),
+          );
         ghostRider.group.visible = true;
         ghostRider.update(
           moving ? dt : 0,
@@ -687,7 +682,10 @@ export function createWorld(
         Math.cos(orbitAngle) * distance,
       );
       desiredCameraPosition.copy(cameraTarget).add(cameraOffset);
-      if (!initialized) {
+      if (
+        !initialized ||
+        camera.position.distanceToSquared(desiredCameraPosition) > 80 * 80
+      ) {
         camera.position.copy(desiredCameraPosition);
         initialized = true;
       } else camera.position.lerp(desiredCameraPosition, 1 - Math.exp(-dt * 5));
@@ -695,7 +693,10 @@ export function createWorld(
         camera.position.y,
         scenery.groundAt(camera.position.x, camera.position.z) + 0.5,
       );
-      const lookOffset = cameraMode ? 12 : Math.cos(orbitYaw) * 12;
+      const lookAhead = scenery.region === "alpine" ? 24 : 18;
+      const lookOffset = cameraMode
+        ? lookAhead
+        : Math.cos(orbitYaw) * lookAhead;
       const lookDistance = route.loop
         ? (((state.distanceMeters + lookOffset) % route.distanceMeters) +
             route.distanceMeters) %
@@ -710,12 +711,15 @@ export function createWorld(
       camera.lookAt(lookTarget);
       shadowTime += Math.max(0, dt);
       if (shadowTime >= 1 / 20) {
-        sun.position.set(point.x - 80, point.y + 150, point.z + 65);
         sun.target.position.set(point.x, point.y, point.z);
+        sun.position
+          .copy(sun.target.position)
+          .addScaledVector(SUN_DIRECTION, 180);
         sun.shadow.needsUpdate = true;
         shadowTime = 0;
       }
       scenery.update(dt, point.x, point.z);
+      atmosphere.update(dt, camera);
       renderer.render(scene, camera);
     },
     dispose() {
