@@ -24,14 +24,20 @@ export default function RaceLeaderboard({
         <tr>
           <th scope="col">#</th>
           <th scope="col">Rider</th>
-          <th scope="col">Gap / finish</th>
+          <th scope="col">Gap / status</th>
         </tr>
       </thead>
       <tbody>
         {standings.map((rider) => (
           <tr
             key={rider.id}
-            className={rider.isPlayer ? styles.player : undefined}
+            className={
+              rider.eliminatedAtSeconds !== undefined
+                ? styles.eaten
+                : rider.isPlayer
+                  ? styles.player
+                  : undefined
+            }
           >
             <td>{rider.rank}</td>
             <th scope="row">
@@ -45,16 +51,20 @@ export default function RaceLeaderboard({
             </th>
             <td
               title={
-                rider.finishTimeSeconds !== undefined
-                  ? "Finish time"
-                  : "Distance behind leader"
+                rider.eliminatedAtSeconds !== undefined
+                  ? "Eaten by zombies"
+                  : rider.finishTimeSeconds !== undefined
+                    ? "Finish time"
+                    : "Distance behind leader"
               }
             >
-              {rider.finishTimeSeconds !== undefined
-                ? `✓ ${finishTime(rider.finishTimeSeconds)}`
-                : rider.rank === 1
-                  ? "—"
-                  : `+${Math.round(rider.gapMeters)} m`}
+              {rider.eliminatedAtSeconds !== undefined
+                ? "EATEN"
+                : rider.finishTimeSeconds !== undefined
+                  ? `✓ ${finishTime(rider.finishTimeSeconds)}`
+                  : rider.rank === 1
+                    ? "—"
+                    : `+${Math.round(rider.gapMeters)} m`}
             </td>
           </tr>
         ))}

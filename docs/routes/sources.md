@@ -1,5 +1,7 @@
 # Route source inventory
 
+[Documentation index](../README.md)
+
 Checked 2026-10-16. All four direct data URLs below returned HTTP 200 and were
 inspected. These are source candidates, not validated runtime packages. The GPX
 files were also parsed with OpenCycling.org's actual importer in memory.
@@ -91,7 +93,7 @@ bundled preview update below for the current files and processing.
 
 Recommended next sequence: resolve reuse terms, extract the intended courses,
 audit alignment/structures, source corrected road elevations, then define and
-measure independent accuracy tolerances. See [pipeline documentation](GEOGRAPHIC-ROUTES.md).
+measure independent accuracy tolerances. See [pipeline documentation](pipeline.md).
 
 ## Bundled city previews (2026-10-21)
 

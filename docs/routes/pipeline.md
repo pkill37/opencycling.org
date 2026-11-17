@@ -1,5 +1,7 @@
 # Geographic route pipeline
 
+[Documentation index](../README.md)
+
 ## Virtual gradient and optional trainer resistance
 
 Route gradients always feed OpenCycling.org's deterministic virtual physics. An FTMS trainer may optionally receive route grade adjusted by the selected in-game gear after the rider explicitly enables control; simulation parameters are preferred and target resistance is used only when necessary. Hardware control is never required for route progression, and a rejected or disconnected command falls back to virtual resistance without stopping the ride.
@@ -7,7 +9,7 @@ Route gradients always feed OpenCycling.org's deterministic virtual physics. An 
 ## Delivery status
 
 Candidate GPX/KML sources have now been located and inspected; see the
-[route source inventory](ROUTE-SOURCES.md) for direct downloads, measured file
+[route source inventory](sources.md) for direct downloads, measured file
 properties, importer diagnostics and remaining data gaps.
 
 Implemented: renderer-independent reference geometry, version-1 package validation,
@@ -18,8 +20,7 @@ minimal road renderer consuming the engine's selected course.
 **The three bundled routes are unverified previews.** Independent reference
 measurements are still needed before geographic accuracy can be confirmed.
 Imported packages are also unverified;
-the schema deliberately cannot assert curated validation. This is an implementation
-foundation, not completion of the PRD's geographic accuracy acceptance gates.
+the schema deliberately cannot assert curated validation. The package format does not establish geographic accuracy.
 
 ### Data feasibility queue (implementation order)
 
@@ -92,8 +93,8 @@ not accuracy guarantees; plausible but erroneous data still needs review.
 
 The first sample defines an azimuthal-equidistant east/north metric frame, with a
 100 km radius bound. Road distance is cumulative 3D segment length. Grade uses
-horizontal segment length; lookup and rendering use the identical piecewise-linear
-line. Elevation gain sums positive supplied elevation differences, with no smoothing.
+horizontal segment length; reference samples define the road; runtime lookup uses smooth interpolation
+for position and heading, shared by physics and rendering. Elevation gain sums positive supplied elevation differences, with no smoothing.
 Curvature uses the circumcircle of adjacent reference samples; no snapping or racing
 line optimization occurs. Raw GPS jitter may materially change curvature and gain.
 Source-aware smoothing, adaptive reconstruction, independent alignment checks,
@@ -175,6 +176,6 @@ Record package sizes, peak memory and frame-time percentiles on agreed target
 devices before raising these limits or publishing the curated release.
 
 Run `npm run check` and `npm run test:e2e`. Hardware trainer verification remains
-the separate checklist in `docs/COMPATIBILITY.md`. Independent geographic
+the separate [trainer compatibility checklist](../trainer-compatibility.md). Independent geographic
 reference acceptance, physical-device performance measurements and curated route
 publication remain release blockers even when automated software tests pass.

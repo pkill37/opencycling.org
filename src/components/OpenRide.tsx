@@ -15,6 +15,7 @@ import { bundledRoutes, loadBundledRoute } from "@/game/route/bundled";
 import RouteMinimap from "./RouteMinimap";
 import PhysicsSettings from "./PhysicsSettings";
 import { RideEngine } from "@/game/loop/engine";
+import { ZombieAudio } from "@/game/audio/zombie-audio";
 import {
   RaceCountdown,
   type CountdownLabel,
@@ -180,6 +181,15 @@ function LoadedOpenRide({
   const source = availability.available ? "bluetooth" : "simulator";
   const [, refresh] = useState(0);
   const [worldLoading, setWorldLoading] = useState(false);
+  const [zombieAudio] = useState(() => new ZombieAudio());
+  const [zombieMuted, setZombieMuted] = useState(false);
+  const [zombieSoundReady, setZombieSoundReady] = useState(false);
+  useEffect(
+    () => () => {
+      void zombieAudio.dispose();
+    },
+    [zombieAudio],
+  );
   const [countdownLabel, setCountdownLabel] = useState<CountdownLabel>(null);
   const raceStarting = countdownLabel !== null && countdownLabel !== "START";
   const [snapshot, setSnapshot] = useState<RiderState>({
@@ -241,6 +251,11 @@ function LoadedOpenRide({
     void trainer.connect(false, cps, reconnect);
   };
   const start = async (requestedMode: GameMode = mode) => {
+    zombieAudio.stop();
+    zombieAudio.setMuted(zombieMuted);
+    // Resume in the Start click's user gesture, before any Bluetooth await.
+    if (requestedMode === "zombies" && !zombieMuted)
+      void zombieAudio.unlock().then(setZombieSoundReady);
     let hardwareControl = false;
     let controlWarning = "";
     if (controlResistance && source === "bluetooth") {
@@ -298,13 +313,14 @@ function LoadedOpenRide({
     setPhase("ride");
   };
   const finish = useCallback(() => {
+    zombieAudio.stop();
     activeEngine.setPaused(true);
     localRace.current?.advance();
     setStandings(localRace.current?.standings ?? []);
     setSummaryReason("ended");
     setSummary(activeEngine.summary());
     setPhase("summary");
-  }, [activeEngine, setPhase]);
+  }, [activeEngine, setPhase, zombieAudio]);
   const ghostPlayback = useCallback((): GhostPlayback | undefined => {
     const run = ghostRunRef.current;
     const elapsedSeconds = activeEngine.renderElapsedSeconds;
@@ -318,6 +334,7 @@ function LoadedOpenRide({
   const togglePause = useCallback(async () => {
     if (raceStarting) return;
     if (!activeEngine.paused) {
+      zombieAudio.stop();
       activeEngine.setPaused(true);
       setPaused(true);
       setControlActive(false);
@@ -332,6 +349,8 @@ function LoadedOpenRide({
         setWarning("Trainer control unavailable — virtual resistance only.");
       }
     }
+    if (modeRef.current === "zombies" && !zombieMuted)
+      void zombieAudio.unlock().then(setZombieSoundReady);
     activeEngine.setPaused(false);
     setPaused(false);
   }, [
@@ -341,7 +360,15 @@ function LoadedOpenRide({
     trainer,
     setWarning,
     raceStarting,
+    zombieAudio,
+    zombieMuted,
   ]);
+  const toggleZombieSound = useCallback(async () => {
+    const muted = zombieSoundReady && !zombieMuted;
+    setZombieMuted(muted);
+    zombieAudio.setMuted(muted);
+    if (!muted) setZombieSoundReady(await zombieAudio.unlock());
+  }, [zombieAudio, zombieMuted, zombieSoundReady]);
   const enableTrainerGears = useCallback(async () => {
     if (
       raceStarting ||
@@ -462,8 +489,25 @@ function LoadedOpenRide({
           if (!showingSummary.current && raceDt > 0) {
             e.advance(raceDt);
             localRace.current?.advance();
-            if (!e.paused && !e.completed)
-              zombiesMode.current?.advance(raceDt, e.state);
+            if (!e.paused && !e.completed) {
+              const opponents =
+                localRace.current?.riders.filter(
+                  (rider) =>
+                    rider.finishTimeSeconds === undefined &&
+                    rider.eliminatedAtSeconds === undefined,
+                ) ?? [];
+              zombiesMode.current?.advance(
+                raceDt,
+                e.state,
+                opponents.map((rider) => ({
+                  id: rider.id,
+                  distanceMeters: rider.state.distanceMeters,
+                })),
+              );
+              localRace.current?.eliminateRiders(
+                zombiesMode.current?.snapshot.eatenRiderIds ?? [],
+              );
+            }
             if (
               e.state.elapsedSeconds * 1000 - lastGhostSampleMs.current >=
               100
@@ -477,6 +521,15 @@ function LoadedOpenRide({
               lastGhostSampleMs.current = e.state.elapsedSeconds * 1000;
             }
           }
+          const audioSnapshot = zombiesMode.current?.snapshot ?? noZombies;
+          zombieAudio.update(
+            audioSnapshot,
+            raceDt > 0 &&
+              !e.paused &&
+              !e.completed &&
+              !showingSummary.current &&
+              !document.hidden,
+          );
           if (!document.hidden) view?.render(dt);
           if (now - published > 100 && !showingSummary.current) {
             zombiesSnapshot.current =
@@ -531,17 +584,19 @@ function LoadedOpenRide({
       });
     const visibility = () => {
       last = performance.now();
+      if (document.hidden) zombieAudio.stop();
     };
     document.addEventListener("visibilitychange", visibility);
     return () => {
       stopped = true;
+      zombieAudio.stop();
       preparation.abort();
       cancelAnimationFrame(frame);
       document.removeEventListener("visibilitychange", visibility);
       view?.dispose();
       world.current = null;
     };
-  }, [worldActive, activeEngine, ghostPlayback]);
+  }, [worldActive, activeEngine, ghostPlayback, zombieAudio]);
   useEffect(() => {
     if (phase !== "ride") return;
     let active = true;
@@ -606,6 +661,7 @@ function LoadedOpenRide({
           "h",
           "escape",
           "f3",
+          "m",
           "[",
           "]",
           ...presets.map((_, i) => String(i + 1)),
@@ -618,6 +674,8 @@ function LoadedOpenRide({
       if (k === "c") toggleCamera();
       if (k === "h") setHud((x) => !x);
       if (k === "f3") setDebug((x) => !x);
+      if (k === "m" && !event.repeat && modeRef.current === "zombies")
+        void toggleZombieSound();
       if (k === "escape") finish();
       if (source === "simulator") {
         if (k === "arrowup" || k === "w") sim.increasePower();
@@ -636,6 +694,7 @@ function LoadedOpenRide({
     finish,
     shiftGear,
     raceStarting,
+    toggleZombieSound,
   ]);
   const menuRoute = routeLoading
     ? bundledRoutes.find((entry) => entry.key === loadingRouteKey)
@@ -1106,6 +1165,24 @@ function LoadedOpenRide({
                           : "BEHIND YOU"}
                   </small>
                   <span>Score {zombies.score}</span>
+                  <button
+                    className={`button ${styles.zombieSound}`}
+                    aria-pressed={zombieSoundReady && !zombieMuted}
+                    title="Toggle zombie sound (M)"
+                    onClick={() => void toggleZombieSound()}
+                    disabled={typeof AudioContext === "undefined"}
+                  >
+                    {typeof AudioContext === "undefined"
+                      ? "Sound unavailable"
+                      : zombieSoundReady && !zombieMuted
+                        ? "Mute zombie sound"
+                        : "Enable zombie sound"}
+                  </button>
+                  {zombies.eatenRiderIds.length > 0 && (
+                    <small>
+                      AI riders eaten: {zombies.eatenRiderIds.length}
+                    </small>
+                  )}
                 </div>
               )}
             </div>

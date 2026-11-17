@@ -1,5 +1,7 @@
 # Road and scenery validation
 
+[Documentation index](../README.md)
+
 Run `npm run world:audit` to inspect Alpe d’Huez, Marseille, and Paris without a browser. Pass a route slug to narrow the sweep, for example `npm run world:audit -- alpe-d-huez`.
 
 The command writes a JSON report for each route to `test-results/<slug>-geometry.json` and exits unsuccessfully when it finds an issue. Reports include coordinates and route distances for failures, placement counts, retained landmarks, and geometry measurements. These are generated artifacts; rerun the command after browser tests, which clear `test-results/`.

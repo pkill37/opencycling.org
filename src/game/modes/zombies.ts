@@ -4,6 +4,8 @@ export interface ZombieState {
   id: number;
   distanceMeters: number;
   gapMeters: number;
+  feedingOnRiderId?: string;
+  feedingSecondsRemaining?: number;
 }
 
 export interface ZombiesSnapshot {
@@ -14,6 +16,7 @@ export interface ZombiesSnapshot {
   nearestGapMeters: number;
   threat: "safe" | "warning" | "danger" | "caught";
   zombies: ZombieState[];
+  eatenRiderIds: string[];
 }
 
 const config = {
@@ -35,6 +38,7 @@ const emptySnapshot: ZombiesSnapshot = {
   nearestGapMeters: Infinity,
   threat: "safe",
   zombies: [],
+  eatenRiderIds: [],
 };
 
 export class ZombiesMode {
@@ -43,6 +47,7 @@ export class ZombiesMode {
   private nextSpawnSeconds = config.spawnEverySeconds;
   private nextId = 1;
   caught = false;
+  private eatenRiders = new Set<string>();
 
   constructor(playerDistanceMeters = 0) {
     this.spawn(playerDistanceMeters - config.startGapMeters);
@@ -67,12 +72,18 @@ export class ZombiesMode {
             ? "warning"
             : "safe",
       zombies: this.zombies.map((zombie) => ({ ...zombie })),
+      eatenRiderIds: [...this.eatenRiders],
     };
   }
 
-  advance(dt: number, rider: RiderState) {
+  advance(
+    dt: number,
+    rider: RiderState,
+    opponents: readonly { id: string; distanceMeters: number }[] = [],
+  ) {
     if (this.caught) return;
     const safeDt = Math.min(Math.max(0, dt), 0.25);
+    if (safeDt === 0) return;
     this.elapsedSeconds += safeDt;
     while (
       this.elapsedSeconds >= this.nextSpawnSeconds &&
@@ -90,11 +101,55 @@ export class ZombiesMode {
           ramp;
     this.zombies = this.zombies
       .map((zombie) => {
-        const distanceMeters = zombie.distanceMeters + speed * safeDt,
-          gapMeters = rider.distanceMeters - distanceMeters;
-        return { ...zombie, distanceMeters, gapMeters };
+        const feeding = zombie.feedingSecondsRemaining ?? 0;
+        const moveDt = Math.max(0, safeDt - feeding);
+        let feedingSecondsRemaining = Math.max(0, feeding - safeDt);
+        let feedingOnRiderId =
+          feedingSecondsRemaining > 0 ? zombie.feedingOnRiderId : undefined;
+        let distanceMeters = zombie.distanceMeters + speed * moveDt;
+        const victim = opponents
+          .filter(
+            (opponent) =>
+              opponent.id !== "player" &&
+              !this.eatenRiders.has(opponent.id) &&
+              opponent.distanceMeters >= zombie.distanceMeters - 2 &&
+              opponent.distanceMeters <= distanceMeters + 2,
+          )
+          .sort(
+            (a, b) =>
+              a.distanceMeters - b.distanceMeters || a.id.localeCompare(b.id),
+          )[0];
+        const playerFirst =
+          rider.distanceMeters - config.catchDistanceMeters <=
+          (victim?.distanceMeters ?? Infinity) - 2;
+        if (feedingSecondsRemaining === 0 && victim && !playerFirst) {
+          this.eatenRiders.add(victim.id);
+          distanceMeters = Math.max(
+            zombie.distanceMeters,
+            victim.distanceMeters - 1,
+          );
+          feedingOnRiderId = victim.id;
+          feedingSecondsRemaining = 2.5;
+        }
+        return {
+          ...zombie,
+          distanceMeters,
+          gapMeters: rider.distanceMeters - distanceMeters,
+          feedingOnRiderId,
+          feedingSecondsRemaining,
+        };
       })
-      .filter((zombie) => zombie.gapMeters < config.despawnBehindMeters);
+      .filter(
+        (zombie) =>
+          (zombie.feedingSecondsRemaining ?? 0) > 0 ||
+          zombie.gapMeters < config.despawnBehindMeters ||
+          opponents.some(
+            (opponent) =>
+              !this.eatenRiders.has(opponent.id) &&
+              Math.abs(opponent.distanceMeters - zombie.distanceMeters) <
+                config.despawnBehindMeters,
+          ),
+      );
     if (!this.zombies.length)
       this.spawn(rider.distanceMeters - config.startGapMeters);
     this.caught = this.zombies.some(

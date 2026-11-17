@@ -41,3 +41,41 @@ test("strong riding keeps the horde behind", () => {
   assert.equal(mode.snapshot.caught, false);
   assert.ok(mode.snapshot.nearestGapMeters > 80);
 });
+
+test("zombies eat an AI rider, pause to feed, and then resume the chase", () => {
+  const mode = new ZombiesMode(100);
+  const opponents = [{ id: "ari", distanceMeters: 21 }];
+  mode.advance(0.1, rider(100), opponents);
+  assert.deepEqual(mode.snapshot.eatenRiderIds, ["ari"]);
+  assert.equal(mode.snapshot.caught, false);
+  assert.equal(mode.snapshot.zombies[0].feedingOnRiderId, "ari");
+  const distance = mode.snapshot.zombies[0].distanceMeters;
+  for (let i = 0; i < 4; i++) mode.advance(0.25, rider(100), opponents);
+  assert.equal(mode.snapshot.zombies[0].distanceMeters, distance);
+  assert.deepEqual(mode.snapshot.eatenRiderIds, ["ari"]);
+  for (let i = 0; i < 8; i++) mode.advance(0.25, rider(100), opponents);
+  assert.ok(mode.snapshot.zombies[0].distanceMeters > distance);
+  assert.equal(mode.snapshot.zombies[0].feedingOnRiderId, undefined);
+});
+
+test("a horde hunting an AI stays active even if the player escapes far ahead", () => {
+  const mode = new ZombiesMode(100);
+  mode.advance(0.1, rider(1000), [{ id: "casey", distanceMeters: 50 }]);
+  assert.ok(mode.snapshot.zombies[0].distanceMeters < 30);
+  assert.equal(mode.snapshot.caught, false);
+});
+
+test("a nearby NPC cannot prevent the player from being caught first", () => {
+  const mode = new ZombiesMode(100);
+  mode.advance(0.1, rider(20), [{ id: "ari", distanceMeters: 21 }]);
+  assert.equal(mode.snapshot.caught, true);
+  assert.deepEqual(mode.snapshot.eatenRiderIds, []);
+});
+
+test("restarting clears eaten riders and zero time cannot trigger an attack", () => {
+  const mode = new ZombiesMode(100);
+  mode.advance(0, rider(100), [{ id: "ari", distanceMeters: 21 }]);
+  assert.deepEqual(mode.snapshot.eatenRiderIds, []);
+  mode.advance(0.1, rider(100), [{ id: "ari", distanceMeters: 21 }]);
+  assert.deepEqual(new ZombiesMode(100).snapshot.eatenRiderIds, []);
+});

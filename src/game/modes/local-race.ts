@@ -16,6 +16,7 @@ export interface RaceRider {
   lane: number;
   state: RiderState;
   finishTimeSeconds?: number;
+  eliminatedAtSeconds?: number;
 }
 export interface RaceStanding extends RaceRider {
   rank: number;
@@ -69,7 +70,7 @@ export class LocalRace {
 
   private step(dt: number) {
     this.opponents.forEach(({ engine, watts, rider }, index) => {
-      if (engine.completed) return;
+      if (engine.completed || rider.eliminatedAtSeconds !== undefined) return;
       const state = engine.state;
       const progress = state.distanceMeters / engine.course.distanceMeters;
       const variation =
@@ -80,6 +81,17 @@ export class LocalRace {
       engine.step(dt, effort, 78 + index * 4 + variation * 30);
       if (engine.completed) rider.finishTimeSeconds = state.elapsedSeconds;
     });
+  }
+
+  eliminateRiders(ids: readonly string[]) {
+    for (const { rider } of this.opponents) {
+      if (
+        ids.includes(rider.id) &&
+        rider.finishTimeSeconds === undefined &&
+        rider.eliminatedAtSeconds === undefined
+      )
+        rider.eliminatedAtSeconds = this.player.state.elapsedSeconds;
+    }
   }
 
   get riders(): RaceRider[] {
@@ -102,6 +114,9 @@ export class LocalRace {
         : undefined,
     };
     const riders = [player, ...this.riders].sort((a, b) => {
+      const aOut = a.eliminatedAtSeconds !== undefined;
+      const bOut = b.eliminatedAtSeconds !== undefined;
+      if (aOut !== bOut) return aOut ? 1 : -1;
       if (
         a.finishTimeSeconds !== undefined ||
         b.finishTimeSeconds !== undefined

@@ -27,7 +27,7 @@
 
 - Playwright config forces one worker and SwiftShader flags; tests write screenshots and diagnostics to `test-results/`, which is ignored.
 - E2E tests assert no landing-page canvas, static metadata/crawler behavior, simulator controls, and mocked Web Bluetooth. Update focused specs when changing these flows.
-- Physical trainer compatibility is not proven by automated tests; `docs/COMPATIBILITY.md` is the manual checklist and hardware record.
+- Physical trainer compatibility is not proven by automated tests; `docs/trainer-compatibility.md` is the manual checklist and hardware record.
 
 ## Style Constraints
 

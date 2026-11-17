@@ -154,3 +154,39 @@ test("finishing freezes the race clock and a restart resets the field", () => {
     ),
   );
 });
+
+test("eaten AI riders stop racing, fall behind survivors and cannot be eliminated twice", () => {
+  const { engine, race, advance } = fixture();
+  for (let i = 0; i < 120; i++) advance(1 / 60);
+  race.eliminateRiders(["ari", "player"]);
+  const victim = race.riders.find((rider) => rider.id === "ari")!;
+  assert.equal(victim.eliminatedAtSeconds, engine.state.elapsedSeconds);
+  for (let i = 0; i < 120; i++) advance(1 / 60);
+  race.eliminateRiders(["ari"]);
+  assert.deepEqual(
+    race.riders.find((rider) => rider.id === "ari"),
+    victim,
+  );
+  assert.equal(race.standings.at(-1)?.id, "ari");
+  assert.equal(
+    race.standings.find((rider) => rider.isPlayer)?.eliminatedAtSeconds,
+    undefined,
+  );
+  assert.ok(
+    race.riders.find((rider) => rider.id === "drew")!.state.distanceMeters >
+      victim.state.distanceMeters,
+  );
+});
+
+test("finished AI riders cannot be eaten", () => {
+  const { race, advance } = fixture(course(10), 0);
+  for (let i = 0; i < 1500; i++) advance(1 / 60);
+  race.eliminateRiders(["ari", "blake", "casey", "drew"]);
+  assert.ok(
+    race.riders.every(
+      (rider) =>
+        rider.finishTimeSeconds !== undefined &&
+        rider.eliminatedAtSeconds === undefined,
+    ),
+  );
+});

@@ -1,5 +1,7 @@
 # Terrain assets
 
+[Documentation index](../README.md)
+
 Run `npx tsx scripts/build-terrain.ts` to rebuild the three bundled terrain sidecars, then `npx prettier --write public/routes/*.terrain.json`.
 The builder downloads Mapzen Skadi HGT tiles from the public AWS terrain bucket and samples a 32 m local grid with a 600 m border. Source resolution varies; this is illustrative terrain, not surveyed road geometry. HGT elevations use WGS84/EGM96. Assets include acquisition date and attribution; route fingerprints prevent reuse against changed GPS geometry.
 

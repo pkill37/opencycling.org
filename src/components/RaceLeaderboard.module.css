@@ -59,3 +59,21 @@
     width: 170px;
   }
 }
+
+.eaten {
+  color: #e6a298;
+  opacity: 0.8;
+}
+.eaten td:last-child {
+  font-size: 9px;
+  font-weight: 700;
+}
+
+@media (min-width: 901px) and (min-height: 541px) {
+  .board {
+    position: absolute;
+    top: 0;
+    left: calc(100% + 12px);
+    width: 190px;
+  }
+}
